@@ -1,0 +1,24 @@
+{
+  "name": "supabase-bms-poller",
+  "version": "1.0.0",
+  "description": "10-Point Niagara oBIX Poller & Telegram Alert Module with Supabase and Clean Architecture",
+  "main": "dist/infrastructure/index.js",
+  "scripts": {
+    "start": "ts-node src/infrastructure/index.ts",
+    "build": "tsc",
+    "dev": "ts-node src/infrastructure/index.ts"
+  },
+  "keywords": ["bms", "obix", "niagara", "telegram", "supabase", "clean-architecture"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  }
+}
+
