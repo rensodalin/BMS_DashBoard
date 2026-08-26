@@ -10,10 +10,9 @@ const TELEGRAM_TOKEN =
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "-5314819518";
 
 const PARENT_OBIX_URL =
-  process.env.OBIX_URL ||
-  "https://localhost/obix/config/Drivers/BacnetNetwork/AHU_Controller/points/";
-const USERNAME = process.env.OBIX_USERNAME || "ObixUser";
-const PASSWORD = process.env.OBIX_PASSWORD || "Admin12345";
+  process.env.OBIX_URL || "https://192.168.1.100/obix/config/Drivers/Pump/";
+const USERNAME = process.env.OBIX_USERNAME || "UserObix";
+const PASSWORD = process.env.OBIX_PASSWORD || "UserObix12345";
 const ALLOW_SELFSIGNED = process.env.OBIX_ALLOW_SELFSIGNED_CERT !== "false";
 
 // SUPABASE CONFIG (Set your Supabase credentials in .env)
