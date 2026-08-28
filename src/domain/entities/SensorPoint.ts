@@ -1,25 +1,43 @@
+/**
+ * ============================================================================
+ * SENSOR POINT ENTITY & DOMAIN EVALUATION ENGINE
+ * ============================================================================
+ * This file defines the core SensorPoint entity and state evaluation rules.
+ * 
+ * 💡 HOW TO CUSTOMIZE ROOM LIMITS:
+ * Add or modify room entries in the `ROOM_LIMITS` dictionary below.
+ * Point names are matched automatically (spaces and underscores are ignored).
+ */
+
 export type PointState =
-  | "HIGH"
-  | "LOW"
-  | "NORMAL"
-  | "SMOKE_ALARM"
-  | "SMOKE_NORMAL"
-  | "ENUM_ALARM"
-  | "ENUM_FAULT"
-  | "ENUM_DISABLE"
-  | "ENUM_NORMAL";
+  | "HIGH"          // Numeric value exceeds high temperature limit
+  | "LOW"           // Numeric value is below low temperature limit
+  | "NORMAL"        // Numeric value is within normal temperature range
+  | "SMOKE_ALARM"   // Smoke/Fire Boolean point triggered (true/on/run)
+  | "SMOKE_NORMAL"  // Smoke/Fire Boolean point clear (false/off/stop)
+  | "BOOL_ON"       // General Equipment Boolean point active (true/on/run/running)
+  | "BOOL_OFF"      // General Equipment Boolean point inactive (false/off/stop/stopped)
+  | "ENUM_ALARM"    // Enum point status code 2 or "Alarm"
+  | "ENUM_FAULT"    // Enum point status code 3 or "Fault"
+  | "ENUM_DISABLE"  // Enum point status code 4 or "Disabled"
+  | "ENUM_NORMAL";  // Enum point status code 1 or "Normal"
 
 export interface RoomLimit {
-  low: number;
-  high: number;
+  low: number;   // Minimum acceptable temperature (°C)
+  high: number;  // Maximum acceptable temperature (°C)
 }
 
+/**
+ * 🛠️ CUSTOMIZABLE ROOM TEMPERATURE THRESHOLDS
+ * You can add new room definitions here anytime!
+ * Example: "Server_Room_1": { low: 16.0, high: 24.0 },
+ */
 export const ROOM_LIMITS: Record<string, RoomLimit> = {
-  "Room1_Temp": { low: 18.0, high: 25.0 },
-  "Room2_Temp": { low: 12.0, high: 22.0 },
-  "Room3_Temp": { low: 20.0, high: 30.0 },
-  "Sensor Test": { low: 20.0, high: 30.0 },
-  "DEFAULT": { low: 20.0, high: 30.0 },
+  "Room1_Temp": { low: 18.0, high: 25.0 },   // Server Room Limits
+  "Room2_Temp": { low: 12.0, high: 22.0 },   // Cold Room Limits
+  "Room3_Temp": { low: 20.0, high: 30.0 },   // Office Room Limits
+  "Sensor Test": { low: 20.0, high: 30.0 },  // Test Sensor Limits
+  "DEFAULT":     { low: 20.0, high: 30.0 },  // Default fallback limit
 };
 
 export interface SensorPointProps {
@@ -51,30 +69,47 @@ export class SensorPoint {
     this.state = props.state;
   }
 
+  /**
+   * Unique state tracking key combining device name & point name
+   */
   public get keyId(): string {
     return `${this.deviceName}_${this.name}`;
   }
 
+  /**
+   * Checks if point is currently in an active alarm/fault/warning condition
+   */
   public isAlarm(): boolean {
     return [
       "HIGH",
       "LOW",
       "SMOKE_ALARM",
+      "BOOL_ON",
       "ENUM_ALARM",
       "ENUM_FAULT",
       "ENUM_DISABLE",
     ].includes(this.state);
   }
 
+  /**
+   * ==========================================================================
+   * DYNAMIC POINT EVALUATION FACTORY METHOD
+   * ==========================================================================
+   * Inspects live display value from Niagara and categorizes it into:
+   *  - TYPE 1: ENUM POINT (Alarm 2, Fault 3, Disabled 4, Normal 1)
+   *  - TYPE 2: BOOLEAN POINT (true/false, on/off, run/stop)
+   *  - TYPE 3: NUMERIC POINT (temperature vs low/high room thresholds)
+   */
   public static evaluatePoint(
     deviceName: string,
     ptName: string,
     displayStr: string
   ): SensorPoint {
+    // 1. Clean encoding characters from point name ($20 / %20 -> spaces)
     const cleanPtName = ptName.replace(/\$20/g, " ").replace(/%20/g, " ");
     const displayClean = displayStr.toLowerCase();
 
-    // Smart lookup in ROOM_LIMITS (ignores case, spaces, and underscores)
+    // 2. Smart lookup in ROOM_LIMITS (ignores case, spaces, and underscores)
     const normKey = cleanPtName.toLowerCase().replace(/[\s_]+/g, "");
     let limits: RoomLimit | undefined =
       ROOM_LIMITS[cleanPtName] || ROOM_LIMITS[ptName];
@@ -96,13 +131,16 @@ export class SensorPoint {
     let numericVal: number | undefined = undefined;
     let valOut = displayStr;
 
-    // TYPE 1: ENUM POINT
+    // ------------------------------------------------------------------------
+    // TYPE 1: ENUM POINT (e.g. Alarm, Fault, Disabled, Normal)
+    // ------------------------------------------------------------------------
     if (
       ["normal", "alarm", "fault", "disable", "disabled"].some((k) =>
         displayClean.includes(k)
       ) &&
       !displayClean.includes("true") &&
-      !displayClean.includes("false")
+      !displayClean.includes("false") &&
+      !/\b(on|off|run|running|stop|stopped)\b/i.test(displayClean)
     ) {
       if (displayClean.includes("alarm") || displayClean.includes("2")) {
         state = "ENUM_ALARM";
@@ -118,11 +156,32 @@ export class SensorPoint {
         state = "ENUM_NORMAL";
       }
     }
-    // TYPE 2: BOOLEAN POINT
-    else if (displayClean.includes("true") || displayClean.includes("false")) {
-      state = displayClean.includes("true") ? "SMOKE_ALARM" : "SMOKE_NORMAL";
+    // ------------------------------------------------------------------------
+    // TYPE 2: BOOLEAN POINT (true/false, on/off, run/running, stop/stopped)
+    // ------------------------------------------------------------------------
+    else if (
+      displayClean.includes("true") ||
+      displayClean.includes("false") ||
+      /\b(on|off|run|running|stop|stopped)\b/i.test(displayClean)
+    ) {
+      const isSmokeOrFire =
+        cleanPtName.toLowerCase().includes("smoke") ||
+        cleanPtName.toLowerCase().includes("fire") ||
+        cleanPtName.toLowerCase().includes("alarm");
+
+      const isOnOrRun =
+        displayClean.includes("true") ||
+        /\b(on|run|running)\b/i.test(displayClean);
+
+      if (isSmokeOrFire) {
+        state = isOnOrRun ? "SMOKE_ALARM" : "SMOKE_NORMAL";
+      } else {
+        state = isOnOrRun ? "BOOL_ON" : "BOOL_OFF";
+      }
     }
-    // TYPE 3: NUMERIC POINT
+    // ------------------------------------------------------------------------
+    // TYPE 3: NUMERIC POINT (Temperature, Pressure, Humidity, kWh numbers)
+    // ------------------------------------------------------------------------
     else {
       const numMatch = displayStr.match(/([0-9.-]+)/);
       if (numMatch) {

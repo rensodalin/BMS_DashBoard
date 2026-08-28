@@ -1,10 +1,19 @@
+/**
+ * ============================================================================
+ * MAIN APPLICATION ENTRY POINT & POLLING WORKER LOOP
+ * ============================================================================
+ * Runs when `npm start` is executed.
+ * Loads `.env` configuration, instantiates Clean Architecture components,
+ * and starts the recurring polling loop.
+ */
+
 import "dotenv/config";
 import { ObixHttpGateway } from "./gateways/ObixHttpGateway";
 import { TelegramApiGateway } from "./gateways/TelegramApiGateway";
 import { SupabaseSensorRepository } from "./database/SupabaseSensorRepository";
 import { Process10PointObixBatch } from "../use-cases/Process10PointObixBatch";
 
-// CONFIGURATION (Loads from .env with fallbacks matching plan)
+// 💡 CONFIGURATION: Edit credentials & settings in your `.env` file!
 const TELEGRAM_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN || "8890272332:AAHprBblI9WaahOIZrT23hJJZs1y1BFNohg";
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID || "-5314819518";
@@ -15,13 +24,14 @@ const USERNAME = process.env.OBIX_USERNAME || "UserObix";
 const PASSWORD = process.env.OBIX_PASSWORD || "UserObix12345";
 const ALLOW_SELFSIGNED = process.env.OBIX_ALLOW_SELFSIGNED_CERT !== "false";
 
-// SUPABASE CONFIG (Set your Supabase credentials in .env)
+// Supabase Connection Credentials
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://YOUR_PROJECT_REF.supabase.co";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY";
 
+// Polling Interval in milliseconds (default: 3000 ms = 3 seconds)
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || "3000", 10);
 
-// Instantiate Clean Architecture Components
+// Instantiate Clean Architecture Components (Dependency Injection)
 const obixGateway = new ObixHttpGateway(PARENT_OBIX_URL, USERNAME, PASSWORD, ALLOW_SELFSIGNED);
 const telegramGateway = new TelegramApiGateway(TELEGRAM_TOKEN, CHAT_ID);
 const sensorRepo = new SupabaseSensorRepository(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -34,7 +44,7 @@ console.log("📡 Target oBIX URL:", PARENT_OBIX_URL);
 console.log(`⏰ Polling Interval: ${POLL_INTERVAL} ms`);
 console.log("===============================================================");
 
-// Main Polling Loop
+// Main Execution Loop
 let isRunning = false;
 
 const runCycle = async () => {
@@ -54,7 +64,6 @@ const runCycle = async () => {
   }
 };
 
-// Initial run followed by recurring timer
+// Execute initial scan cycle immediately, then repeat on interval
 runCycle();
 setInterval(runCycle, POLL_INTERVAL);
-

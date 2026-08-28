@@ -1,0 +1,65 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #0b0f17;
+    color: #f1f5f9;
+    font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Professional Enterprise Card & Panel Styling */
+.bms-panel {
+  background-color: #111827;
+  border: 1px solid #1f293d;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+}
+
+.bms-card {
+  background-color: #162032;
+  border: 1px solid #23314a;
+  border-radius: 0.75rem;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.bms-card:hover {
+  border-color: #3b82f6;
+}
+
+.bms-card-alarm {
+  background-color: rgba(239, 68, 68, 0.06) !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+.bms-input {
+  background-color: #0d131f;
+  border: 1px solid #23314a;
+  color: #ffffff;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  font-family: 'Poppins', sans-serif;
+  transition: border-color 0.15s ease;
+}
+
+.bms-input:focus {
+  border-color: #2563eb;
+  outline: none;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0b0f17;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}

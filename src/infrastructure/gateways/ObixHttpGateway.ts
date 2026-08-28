@@ -49,12 +49,13 @@ export class ObixHttpGateway implements IObixGateway {
       throw new Error(`oBIX Error (${errType}): ${errDisplay}`);
     }
 
+    const hasPointMatches = /<ref\s+name="([^"]+)"[^>]*display="([^"]+)"/i.test(xmlText);
     const driverFolderMatches = Array.from(
       xmlText.matchAll(/<ref\s+name="([^"]+)"[^>]*href="([^"]+)"/gi)
     );
 
-    // If query targets Drivers root directly (e.g. .../config/Drivers/)
-    if (this.obixUrl.toLowerCase().endsWith("/drivers/") && driverFolderMatches.length > 0) {
+    // Whole-Station Drivers Root Mode (crawls subfolders)
+    if (driverFolderMatches.length > 0 && !hasPointMatches) {
       for (const match of driverFolderMatches) {
         const devRawName = match[1];
         const devHref = match[2];
@@ -62,7 +63,9 @@ export class ObixHttpGateway implements IObixGateway {
         if (devRawName.includes("ObixNetwork")) continue;
 
         const devCleanName = devRawName.replace(/\$20/g, " ").replace(/%20/g, " ");
-        const deviceUrl = `${this.obixUrl}${devHref}`;
+        const deviceUrl = devHref.startsWith("http")
+          ? devHref
+          : `${this.obixUrl}${devHref.replace(/^\//, "")}`;
 
         try {
           const resDev = await fetch(deviceUrl, {
