@@ -30,30 +30,47 @@ export class TelegramApiGateway implements ITelegramGateway {
   }
 
   /**
-   * Helper method to send raw HTML payload to Telegram Bot API
+   * Helper method to send raw HTML payload to Telegram Bot API with automatic retries & timeout
    */
-  private async sendTelegramMsg(msgText: string): Promise<boolean> {
+  private async sendTelegramMsg(msgText: string, retries = 3): Promise<boolean> {
     const url = `https://api.telegram.org/bot${this.botToken}/sendMessage`;
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: this.chatId,
-          text: msgText,
-          parse_mode: "HTML",
-        }),
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error(`❌ Telegram send failed (${res.status}): ${errorText}`);
-        return false;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chat_id: this.chatId,
+            text: msgText,
+            parse_mode: "HTML",
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error(`❌ Telegram API Error (${res.status}): ${errorText}`);
+          return false;
+        }
+
+        return true;
+      } catch (e: any) {
+        clearTimeout(timeout);
+        if (attempt < retries) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        } else {
+          console.warn(`⚠️ Telegram Connection Notice: ${e.message || e}`);
+        }
       }
-      return true;
-    } catch (e: any) {
-      console.error("❌ Telegram Send Exception:", e.message || e);
-      return false;
     }
+
+    return false;
   }
 
   /**
@@ -94,7 +111,7 @@ export class TelegramApiGateway implements ITelegramGateway {
       header = `✅ <b>BMS ${cleanPoint.toUpperCase()} NORMAL</b> ✅`;
       statusDesc = "🟢 <b>Status:</b> System Normal (State 1)";
       readingStr = "✅ NORMAL (1)";
-    } 
+    }
     // 2. BOOLEAN (True / False) SMOKE / FIRE ALERTS
     else if (stateType === "SMOKE_ALARM") {
       header = `🚨 <b>BMS SMOKE DETECTED ALERT!</b> 🚨`;
@@ -104,44 +121,78 @@ export class TelegramApiGateway implements ITelegramGateway {
       header = `✅ <b>BMS ${cleanPoint.toUpperCase()} NORMAL</b> ✅`;
       statusDesc = "🟢 <b>Status:</b> Normal (No Smoke Detected)";
       readingStr = "CLEAR (FALSE)";
-    } 
-    // 3. BOOLEAN RUN / STOP / ON / OFF ALERTS
-    else if (stateType === "BOOL_ON") {
-      const isRunText = /\b(run|running)\b/i.test(displayVal);
-      header = isRunText
-        ? `⚡ <b>BMS ${cleanPoint.toUpperCase()} IS RUNNING!</b> ⚡`
-        : `⚡ <b>BMS ${cleanPoint.toUpperCase()} IS ON!</b> ⚡`;
-      statusDesc = "🟢 <b>Status:</b> System Active / Running";
-      readingStr = isRunText ? `⚡ RUNNING (${displayVal})` : `⚡ ON (${displayVal})`;
-    } else if (stateType === "BOOL_OFF") {
-      const isStopText = /\b(stop|stopped)\b/i.test(displayVal);
-      header = isStopText
-        ? `🔴 <b>BMS ${cleanPoint.toUpperCase()} IS STOPPED</b> 🔴`
-        : `🔴 <b>BMS ${cleanPoint.toUpperCase()} IS OFF</b> 🔴`;
-      statusDesc = "🛑 <b>Status:</b> System Standby / Stopped";
-      readingStr = isStopText ? `🔴 STOPPED (${displayVal})` : `🔴 OFF (${displayVal})`;
-    } 
-    // 4. NUMERIC TEMPERATURE HIGH / LOW / NORMAL ALERTS
-    else if (stateType === "HIGH") {
-      header = `🚨 <b>BMS HIGH ${cleanPoint.toUpperCase()} ALERT!</b> 🚨`;
-      statusDesc = `🔥 <b>Status:</b> High Limit (&gt; ${highLim.toFixed(1)} °C)`;
-      readingStr = `${displayVal} °C`;
-    } else if (stateType === "LOW") {
-      header = `❄️ <b>BMS LOW ${cleanPoint.toUpperCase()} ALERT!</b> ❄️`;
-      statusDesc = `🧊 <b>Status:</b> Low Limit (&lt; ${lowLim.toFixed(1)} °C)`;
-      readingStr = `${displayVal} °C`;
-    } else {
-      header = `✅ <b>BMS ${cleanPoint.toUpperCase()} NORMAL</b> ✅`;
-      statusDesc = `🟢 <b>Status:</b> Normal (${lowLim.toFixed(1)} °C - ${highLim.toFixed(1)} °C)`;
-      readingStr = `${displayVal} °C`;
     }
+    // 3. BOOLEAN RUN / STOP / ON / OFF / ACB ENERGIZED ALERTS
+    else if (stateType === "BOOL_ON") {
+      const isAcb =
+        cleanPoint.toUpperCase().includes("ACB") ||
+        deviceName.toUpperCase().includes("ACB");
+      const isRunText = /\b(run|running)\b/i.test(displayVal);
+
+      if (isAcb) {
+        header = `⚡ <b>BMS ${cleanPoint.toUpperCase()} IS ENERGIZED!</b> ⚡`;
+        statusDesc = "🟢 <b>Status:</b> System Active / Energized";
+        readingStr = `⚡ ON (${displayVal})`;
+      } else if (isRunText) {
+        header = `⚡ <b>BMS ${cleanPoint.toUpperCase()} IS RUNNING!</b> ⚡`;
+        statusDesc = "🟢 <b>Status:</b> System Active / Running";
+        readingStr = `⚡ RUNNING (${displayVal})`;
+      } else {
+        header = `⚡ <b>BMS ${cleanPoint.toUpperCase()} IS ON!</b> ⚡`;
+        statusDesc = "🟢 <b>Status:</b> System Active / Running";
+        readingStr = `⚡ ON (${displayVal})`;
+      }
+    } else if (stateType === "BOOL_OFF") {
+      const isAcb =
+        cleanPoint.toUpperCase().includes("ACB") ||
+        deviceName.toUpperCase().includes("ACB");
+      const isStopText = /\b(stop|stopped)\b/i.test(displayVal);
+
+      if (isAcb) {
+        header = `🔴 <b>BMS ${cleanPoint.toUpperCase()} IS DE-ENERGIZED</b> 🔴`;
+        statusDesc = "🛑 <b>Status:</b> System Inactive / De-energized";
+        readingStr = `🔴 OFF (${displayVal})`;
+      } else if (isStopText) {
+        header = `🔴 <b>BMS ${cleanPoint.toUpperCase()} IS STOPPED</b> 🔴`;
+        statusDesc = "🛑 <b>Status:</b> System Standby / Stopped";
+        readingStr = `🔴 STOPPED (${displayVal})`;
+      } else {
+        header = `🔴 <b>BMS ${cleanPoint.toUpperCase()} IS OFF</b> 🔴`;
+        statusDesc = "🛑 <b>Status:</b> System Standby / Stopped";
+        readingStr = `🔴 OFF (${displayVal})`;
+      }
+    }
+    // 4. NUMERIC (TEMPERATURE / POWER kWh / PRESSURE) ALERTS
+    else {
+      const unit = SensorPoint.getPointUnit(cleanPoint, displayVal);
+      const isTemp = unit === "°C";
+
+      if (stateType === "HIGH") {
+        const alertIcon = isTemp ? "🔥" : "⚠️";
+        header = `🚨 <b>BMS HIGH ${cleanPoint.toUpperCase()} ALERT!</b> 🚨`;
+        statusDesc = `${alertIcon} <b>Status:</b> High Limit (&gt; ${highLim.toFixed(1)} ${unit})`;
+        readingStr = `${displayVal} ${unit}`;
+      } else if (stateType === "LOW") {
+        const alertIcon = isTemp ? "🧊" : "📉";
+        header = `❄️ <b>BMS LOW ${cleanPoint.toUpperCase()} ALERT!</b> ❄️`;
+        statusDesc = `${alertIcon} <b>Status:</b> Low Limit (&lt; ${lowLim.toFixed(1)} ${unit})`;
+        readingStr = `${displayVal} ${unit}`;
+      } else {
+        header = `✅ <b>BMS ${cleanPoint.toUpperCase()} NORMAL</b> ✅`;
+        statusDesc = `🟢 <b>Status:</b> Normal (${displayVal} ${unit})`;
+        readingStr = `${displayVal} ${unit}`;
+      }
+    }
+
+    const unit = SensorPoint.getPointUnit(cleanPoint, displayVal);
+    const statusIcon = unit === "°C" ? "🌡" : "⚡";
 
     const timeStr = new Date().toISOString().replace("T", " ").substring(0, 19);
     const msg =
       `${header}\n\n` +
       `🏷 <b>Device:</b> ${deviceName}\n` +
       `📍 <b>Point:</b> ${cleanPoint}\n` +
-      `🌡 <b>Current Status:</b> ${readingStr}\n` +
+      `${statusIcon} <b>Current Status:</b> ${readingStr}\n` +
       `${statusDesc}\n` +
       `⏰ <b>Time:</b> ${timeStr}`;
 

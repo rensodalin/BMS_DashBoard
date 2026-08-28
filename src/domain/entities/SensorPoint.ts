@@ -2,11 +2,7 @@
  * ============================================================================
  * SENSOR POINT ENTITY & DOMAIN EVALUATION ENGINE
  * ============================================================================
- * This file defines the core SensorPoint entity and state evaluation rules.
- * 
- * 💡 HOW TO CUSTOMIZE ROOM LIMITS:
- * Add or modify room entries in the `ROOM_LIMITS` dictionary below.
- * Point names are matched automatically (spaces and underscores are ignored).
+ * Defines the core SensorPoint entity and state evaluation rules.
  */
 
 export type PointState =
@@ -27,11 +23,6 @@ export interface RoomLimit {
   high: number;  // Maximum acceptable temperature (°C)
 }
 
-/**
- * 🛠️ CUSTOMIZABLE ROOM TEMPERATURE THRESHOLDS
- * You can add new room definitions here anytime!
- * Example: "Server_Room_1": { low: 16.0, high: 24.0 },
- */
 export const ROOM_LIMITS: Record<string, RoomLimit> = {
   "Room1_Temp": { low: 18.0, high: 25.0 },   // Server Room Limits
   "Room2_Temp": { low: 12.0, high: 22.0 },   // Cold Room Limits
@@ -63,22 +54,18 @@ export class SensorPoint {
     this.deviceName = props.deviceName;
     this.name = props.name;
     this.displayValue = props.displayValue;
-    this.numericValue = props.numericValue ?? 0;
+    this.numericValue =
+      props.numericValue ??
+      (["BOOL_ON", "SMOKE_ALARM", "ENUM_ALARM"].includes(props.state) ? 1 : 0);
     this.lowLimit = props.lowLimit;
     this.highLimit = props.highLimit;
     this.state = props.state;
   }
 
-  /**
-   * Unique state tracking key combining device name & point name
-   */
   public get keyId(): string {
     return `${this.deviceName}_${this.name}`;
   }
 
-  /**
-   * Checks if point is currently in an active alarm/fault/warning condition
-   */
   public isAlarm(): boolean {
     return [
       "HIGH",
@@ -91,25 +78,14 @@ export class SensorPoint {
     ].includes(this.state);
   }
 
-  /**
-   * ==========================================================================
-   * DYNAMIC POINT EVALUATION FACTORY METHOD
-   * ==========================================================================
-   * Inspects live display value from Niagara and categorizes it into:
-   *  - TYPE 1: ENUM POINT (Alarm 2, Fault 3, Disabled 4, Normal 1)
-   *  - TYPE 2: BOOLEAN POINT (true/false, on/off, run/stop)
-   *  - TYPE 3: NUMERIC POINT (temperature vs low/high room thresholds)
-   */
   public static evaluatePoint(
     deviceName: string,
     ptName: string,
     displayStr: string
   ): SensorPoint {
-    // 1. Clean encoding characters from point name ($20 / %20 -> spaces)
     const cleanPtName = ptName.replace(/\$20/g, " ").replace(/%20/g, " ");
     const displayClean = displayStr.toLowerCase();
 
-    // 2. Smart lookup in ROOM_LIMITS (ignores case, spaces, and underscores)
     const normKey = cleanPtName.toLowerCase().replace(/[\s_]+/g, "");
     let limits: RoomLimit | undefined =
       ROOM_LIMITS[cleanPtName] || ROOM_LIMITS[ptName];
@@ -128,12 +104,10 @@ export class SensorPoint {
     const highLim = limits.high;
 
     let state: PointState = "NORMAL";
-    let numericVal: number | undefined = undefined;
+    let numericVal: number = 0;
     let valOut = displayStr;
 
-    // ------------------------------------------------------------------------
-    // TYPE 1: ENUM POINT (e.g. Alarm, Fault, Disabled, Normal)
-    // ------------------------------------------------------------------------
+    // 1. ENUM POINT
     if (
       ["normal", "alarm", "fault", "disable", "disabled"].some((k) =>
         displayClean.includes(k)
@@ -144,21 +118,23 @@ export class SensorPoint {
     ) {
       if (displayClean.includes("alarm") || displayClean.includes("2")) {
         state = "ENUM_ALARM";
+        numericVal = 2;
       } else if (displayClean.includes("fault") || displayClean.includes("3")) {
         state = "ENUM_FAULT";
+        numericVal = 3;
       } else if (
         displayClean.includes("disable") ||
         displayClean.includes("disabled") ||
         displayClean.includes("4")
       ) {
         state = "ENUM_DISABLE";
+        numericVal = 4;
       } else {
         state = "ENUM_NORMAL";
+        numericVal = 1;
       }
     }
-    // ------------------------------------------------------------------------
-    // TYPE 2: BOOLEAN POINT (true/false, on/off, run/running, stop/stopped)
-    // ------------------------------------------------------------------------
+    // 2. BOOLEAN POINT (true/false, on/off, run/running, stop/stopped)
     else if (
       displayClean.includes("true") ||
       displayClean.includes("false") ||
@@ -173,22 +149,34 @@ export class SensorPoint {
         displayClean.includes("true") ||
         /\b(on|run|running)\b/i.test(displayClean);
 
+      numericVal = isOnOrRun ? 1 : 0;
+
       if (isSmokeOrFire) {
         state = isOnOrRun ? "SMOKE_ALARM" : "SMOKE_NORMAL";
       } else {
         state = isOnOrRun ? "BOOL_ON" : "BOOL_OFF";
       }
     }
-    // ------------------------------------------------------------------------
-    // TYPE 3: NUMERIC POINT (Temperature, Pressure, Humidity, kWh numbers)
-    // ------------------------------------------------------------------------
+    // 3. NUMERIC POINT
     else {
       const numMatch = displayStr.match(/([0-9.-]+)/);
       if (numMatch) {
         numericVal = parseFloat(numMatch[1]);
         valOut = numericVal.toFixed(1);
 
-        if (numericVal > highLim) {
+        const nameLower = cleanPtName.toLowerCase();
+        const isEnergyMeter =
+          nameLower.includes("kwh") ||
+          nameLower.includes("meter") ||
+          nameLower.includes("power") ||
+          nameLower.includes("energy") ||
+          nameLower.includes("tenantintersys");
+
+        // Energy accumulator points (e.g. TenantIntersys_kWh = 1030.0 kWh) accumulate consumption
+        // and should NOT trigger a high temperature alarm (> 30°C).
+        if (isEnergyMeter) {
+          state = "NORMAL";
+        } else if (numericVal > highLim) {
           state = "HIGH";
         } else if (numericVal < lowLim) {
           state = "LOW";
@@ -207,5 +195,27 @@ export class SensorPoint {
       highLimit: highLim,
       state,
     });
+  }
+
+  public static getPointUnit(ptName: string, displayVal: string = ""): string {
+    const nameLower = ptName.toLowerCase();
+    const valLower = displayVal.toLowerCase();
+
+    if (nameLower.includes("kwh") || valLower.includes("kwh") || valLower.includes("kw-hr")) {
+      return "kWh";
+    }
+    if (nameLower.includes("kw") || valLower.includes("kw")) {
+      return "kW";
+    }
+    if (nameLower.includes("volt") || nameLower.includes("voltage")) {
+      return "V";
+    }
+    if (nameLower.includes("amp") || nameLower.includes("current")) {
+      return "A";
+    }
+    if (nameLower.includes("humidity") || nameLower.includes("rh")) {
+      return "%";
+    }
+    return "°C";
   }
 }

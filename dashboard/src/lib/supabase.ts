@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { SensorPoint, PointReading } from '../types/bms';
+import type { SensorPoint, PointReading, TenantInvoiceDb, UtilityRate, TenantMeter } from '../types/bms';
 
 // Read credentials from env or fallback to project credentials
 const SUPABASE_URL =
@@ -50,7 +50,6 @@ export async function addOrUpdateSensorPoint(point: Partial<SensorPoint>): Promi
 
   if (error) {
     console.error('Error upserting sensor_point:', error.message);
-    // If obix_url column doesn't exist in Supabase yet, retry without obix_url column
     if (error.message.includes('obix_url') || error.code === 'PGRST204') {
       delete payload.obix_url;
       const { error: retryErr } = await supabase.from('sensor_points').upsert(
@@ -63,6 +62,22 @@ export async function addOrUpdateSensorPoint(point: Partial<SensorPoint>): Promi
       }
       return true;
     }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Delete a sensor point from Supabase database
+ */
+export async function deleteSensorPoint(pointName: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('sensor_points')
+    .delete()
+    .eq('point_name', pointName);
+
+  if (error) {
+    console.error(`Error deleting sensor_point ${pointName}:`, error.message);
     return false;
   }
   return true;
@@ -84,4 +99,98 @@ export async function fetchPointReadings(pointName: string, limit = 50): Promise
     return [];
   }
   return (data || []).reverse();
+}
+
+// ==============================================================================
+// BILLING SYSTEM DATABASE HELPERS
+// ==============================================================================
+
+/**
+ * Fetch all tenant invoices from Supabase
+ */
+export async function fetchTenantInvoices(): Promise<TenantInvoiceDb[]> {
+  const { data, error } = await supabase
+    .from('tenant_invoices')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.warn('Info: tenant_invoices table query notice:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Fetch all tenant meters from Supabase
+ */
+export async function fetchTenantMeters(): Promise<TenantMeter[]> {
+  const { data, error } = await supabase
+    .from('tenant_meters')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.warn('Info: tenant_meters table query notice:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Fetch active utility rate tariff settings from Supabase
+ */
+export async function fetchUtilityRates(): Promise<UtilityRate | null> {
+  const { data, error } = await supabase
+    .from('utility_rates')
+    .select('*')
+    .eq('is_active', true)
+    .limit(1)
+    .single();
+
+  if (error) {
+    console.warn('Info: utility_rates table query notice:', error.message);
+    return null;
+  }
+  return data;
+}
+
+/**
+ * Update global tariff rate ($/kWh) in Supabase database
+ */
+export async function updateUtilityRate(ratePerKwh: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('utility_rates')
+    .upsert(
+      {
+        rate_name: 'Standard Commercial Tariff',
+        rate_per_kwh: ratePerKwh,
+        currency: 'USD',
+        khr_exchange_rate: 4100.0,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'rate_name' }
+    );
+
+  if (error) {
+    console.warn('Warning updating utility_rates:', error.message);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Upsert tenant invoice record in Supabase
+ */
+export async function upsertTenantInvoice(invoice: Partial<TenantInvoiceDb>): Promise<boolean> {
+  const { error } = await supabase
+    .from('tenant_invoices')
+    .upsert(invoice, { onConflict: 'invoice_number' });
+
+  if (error) {
+    console.warn('Warning upserting tenant_invoice:', error.message);
+    return false;
+  }
+  return true;
 }
