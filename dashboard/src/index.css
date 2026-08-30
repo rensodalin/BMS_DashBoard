@@ -1,65 +1,267 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @layer base {
+  :root {
+    --bms-bg-main: #17181c;
+    --bms-bg-header: #121316;
+    --bms-bg-sidebar: #121316;
+    --bms-bg-card: #202227;
+    --bms-bg-card-hover: #26282e;
+    --bms-bg-well: #16181c;
+    --bms-border: #2d3038;
+    --bms-border-light: #363943;
+    --bms-cyan: #00a4e4;
+    --bms-cyan-glow: rgba(0, 164, 228, 0.15);
+    --bms-red: #e52b20;
+    --bms-red-glow: rgba(229, 43, 32, 0.15);
+    --bms-green: #48bb78;
+    --bms-amber: #fa8c16;
+    --bms-text-primary: #ffffff;
+    --bms-text-secondary: #9ca3af;
+    --bms-text-muted: #64748b;
+  }
+
   body {
-    background-color: #0b0f17;
-    color: #f1f5f9;
-    font-family: 'Poppins', system-ui, -apple-system, sans-serif;
+    background-color: #17181c;
+    color: #ffffff;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
-/* Professional Enterprise Card & Panel Styling */
-.bms-panel {
-  background-color: #111827;
-  border: 1px solid #1f293d;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+/* ============================================
+   HONEYWELL FORGE DESIGN SYSTEM
+   ============================================ */
+
+/* Surface Panels */
+.hw-panel {
+  background-color: #202227;
+  border: 1px solid #2d3038;
+  border-radius: 4px;
 }
 
-.bms-card {
-  background-color: #162032;
-  border: 1px solid #23314a;
-  border-radius: 0.75rem;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+.hw-panel-well {
+  background-color: #17181c;
+  border: 1px solid #282a32;
+  border-radius: 4px;
 }
 
-.bms-card:hover {
-  border-color: #3b82f6;
+/* Tab Navigation */
+.hw-tab-btn {
+  padding: 0.65rem 0.25rem 0.5rem 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b929e;
+  position: relative;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  transition: color 0.15s ease;
+  white-space: nowrap;
 }
 
-.bms-card-alarm {
-  background-color: rgba(239, 68, 68, 0.06) !important;
-  border-color: rgba(239, 68, 68, 0.35) !important;
-}
-
-.bms-input {
-  background-color: #0d131f;
-  border: 1px solid #23314a;
+.hw-tab-btn:hover {
   color: #ffffff;
-  border-radius: 0.5rem;
-  padding: 0.625rem 0.875rem;
-  font-family: 'Poppins', sans-serif;
+}
+
+.hw-tab-btn.active {
+  color: #ffffff;
+}
+
+.hw-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #00a4e4;
+}
+
+/* Sub filter pills */
+.hw-filter-pill {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8b929e;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border-radius: 2px;
+}
+
+.hw-filter-pill:hover {
+  color: #ffffff;
+  background-color: #2b2e36;
+}
+
+.hw-filter-pill.active {
+  color: #00a4e4;
+  position: relative;
+}
+
+.hw-filter-pill.active::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0.4rem;
+  right: 0.4rem;
+  height: 2px;
+  background-color: #00a4e4;
+}
+
+/* Enterprise Table */
+.hw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.hw-table th {
+  background-color: #17181c;
+  color: #8b929e;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid #2d3038;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.hw-table td {
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid #26282f;
+  color: #d1d5db;
+  font-size: 0.8125rem;
+}
+
+.hw-table tr:hover td {
+  background-color: #262930;
+}
+
+.hw-table tr.alarm-row td {
+  background-color: rgba(229, 43, 32, 0.04);
+}
+
+.hw-table tr.alarm-row:hover td {
+  background-color: rgba(229, 43, 32, 0.08);
+}
+
+/* Custom Checkbox */
+.hw-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid #4a4e5a;
+  border-radius: 2px;
+  background-color: #17181c;
+  cursor: pointer;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.hw-checkbox:checked {
+  background-color: #00a4e4;
+  border-color: #00a4e4;
+}
+
+.hw-checkbox:checked::after {
+  content: '✓';
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+/* Inputs & Search Box */
+.hw-input {
+  background-color: #15161a;
+  border: 1px solid #2d3038;
+  color: #e5e7eb;
+  border-radius: 3px;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.75rem;
   transition: border-color 0.15s ease;
 }
 
-.bms-input:focus {
-  border-color: #2563eb;
+.hw-input:focus {
   outline: none;
+  border-color: #00a4e4;
+  box-shadow: 0 0 0 1px rgba(0, 164, 228, 0.25);
+}
+
+.hw-search-box {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background-color: #17181c;
+  border: 1px solid #2d3038;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+
+.hw-search-box:hover {
+  border-color: #3b3f4c;
+}
+
+.hw-search-box:focus-within {
+  border-color: #00a4e4;
+  background-color: #121316;
+  box-shadow: 0 0 0 2px rgba(0, 164, 228, 0.15);
+}
+
+.hw-search-box input {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem 0.35rem 2rem;
+  width: 220px;
+  outline: none;
+  font-family: inherit;
+}
+
+.hw-search-box input::placeholder {
+  color: #64748b;
+  font-size: 0.75rem;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b0f17;
+  background: #17181c;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: #2d3038;
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #3f434e;
+}
+
+/* Pulse Dot Animation */
+@keyframes hw-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.92); }
+}
+
+.hw-pulse {
+  animation: hw-pulse 2s ease-in-out infinite;
 }

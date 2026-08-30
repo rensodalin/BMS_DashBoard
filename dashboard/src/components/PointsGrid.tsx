@@ -33,15 +33,14 @@ export function formatPointReading(pt: SensorPoint): {
   const isTrueTemp = (nameLower.includes('temp') || nameLower.includes('temperature')) && !isPumpOrFan && !isSmoke;
 
   // 1. ENUM / MULTI-STATE STATUS POINTS (Fault 3, Disabled 4, Alarm 2)
-  // Evaluated FIRST so enum points like SmokeRoom1 showing Fault (3) display FAULT (3)!
   if (stateStr === 'ENUM_FAULT' || displayLower.includes('fault') || val === 3) {
-    return { displayText: '⚠️ FAULT ', isTemp: false, isAlarm: true, statusClass: 'text-amber-400' };
+    return { displayText: '⚠️ FAULT', isTemp: false, isAlarm: true, statusClass: 'text-amber-400' };
   }
   if (stateStr === 'ENUM_DISABLE' || displayLower.includes('disable') || displayLower.includes('disabled') || val === 4) {
-    return { displayText: '🔴 DISABLED ', isTemp: false, isAlarm: false, statusClass: 'text-slate-400' };
+    return { displayText: '🔴 DISABLED', isTemp: false, isAlarm: false, statusClass: 'text-slate-400' };
   }
   if (stateStr === 'ENUM_ALARM' || (displayLower.includes('alarm') && !isSmoke) || val === 2) {
-    return { displayText: '🚨 ALARM ', isTemp: false, isAlarm: true, statusClass: 'text-red-400' };
+    return { displayText: '🚨 ALARM', isTemp: false, isAlarm: true, statusClass: 'text-red-400' };
   }
 
   // 2. NUMERIC TEMPERATURE POINT
@@ -59,14 +58,14 @@ export function formatPointReading(pt: SensorPoint): {
     };
   }
 
-  // 3. SMOKE / FIRE ALARM POINT (Boolean Smoke/Fire)
+  // 3. SMOKE / FIRE ALARM POINT
   if (isSmoke || stateStr === 'SMOKE_ALARM' || stateStr === 'SMOKE_NORMAL') {
-    const isAlarm = pt.is_alarm || stateStr === 'SMOKE_ALARM' || val === 1 || displayLower.includes('true');
+    const isFireAlarm = pt.is_alarm || stateStr === 'SMOKE_ALARM' || (val > 0 && !displayLower.includes('normal')) || displayLower.includes('alarm') || displayLower.includes('fire');
     return {
-      displayText: isAlarm ? '✅ NORMAL' : '✅ CLEAR (NORMAL)',
+      displayText: isFireAlarm ? '🔥 SMOKE ALARM' : '✅ NORMAL',
       isTemp: false,
-      isAlarm,
-      statusClass: isAlarm ? 'text-green-400' : 'text-emerald-400',
+      isAlarm: isFireAlarm,
+      statusClass: isFireAlarm ? 'text-red-400' : 'text-emerald-400',
     };
   }
 
@@ -121,7 +120,7 @@ export function formatPointReading(pt: SensorPoint): {
   }
 
   if (stateStr === 'ENUM_NORMAL' || displayLower.includes('normal') || val === 1) {
-    return { displayText: '✅ NORMAL (1)', isTemp: false, isAlarm: false, statusClass: 'text-emerald-400' };
+    return { displayText: '✅ NORMAL', isTemp: false, isAlarm: false, statusClass: 'text-emerald-400' };
   }
 
   // Fallback
@@ -140,22 +139,21 @@ export const PointsGrid: React.FC<PointsGridProps> = ({
 }) => {
   if (points.length === 0) {
     return (
-      <div className="bms-panel p-12 rounded-xl text-center text-slate-400">
-        <Thermometer className="w-10 h-10 text-slate-500 mx-auto mb-3" />
+      <div className="hw-panel p-12 text-center text-slate-400">
+        <Thermometer className="w-10 h-10 text-slate-600 mx-auto mb-3" />
         <h3 className="text-base font-semibold text-white mb-1">No Sensor Points Found</h3>
         <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-          Start your Node.js poller worker (<code className="text-blue-400">npm start</code>) or click <strong className="text-white">"Add Sensor Point"</strong> to add points.
+          Start your Niagara telemetry poller worker or click <strong className="text-white">"Add Point"</strong> to add points.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
       {points.map((pt) => {
         const reading = formatPointReading(pt);
 
-        // Gauge percentage calculation
         const pct = reading.isTemp
           ? Math.min(100, Math.max(0, (pt.current_value / (pt.alert_threshold || 40)) * 100))
           : 50;
@@ -163,87 +161,89 @@ export const PointsGrid: React.FC<PointsGridProps> = ({
         return (
           <div
             key={pt.point_name}
-            className={`bms-card p-5 flex flex-col justify-between relative group ${reading.isAlarm ? 'bms-card-alarm' : ''
-              }`}
+            className="hw-panel p-4 flex flex-col justify-between relative select-none"
+            style={{
+              borderLeft: reading.isAlarm ? '3px solid #e52b20' : '1px solid #2d3038',
+              backgroundColor: reading.isAlarm ? 'rgba(229, 43, 32, 0.05)' : '#202227',
+            }}
           >
             {/* Top Bar */}
             <div>
-              <div className="flex items-start justify-between gap-3 mb-3">
+              <div className="flex items-start justify-between gap-3 mb-2.5">
                 <div>
-                  <div className="flex items-center gap-1.5 text-xs font-mono text-slate-400 mb-1">
-                    <HardDrive className="w-3.5 h-3.5 text-blue-400" />
+                  <div className="flex items-center gap-1.5 text-xs font-mono text-slate-400 mb-0.5">
+                    <HardDrive className="w-3 h-3 text-cyan-400" />
                     <span>{pt.device_name || 'Niagara Controller'}</span>
                   </div>
-                  <h3 className="text-base font-semibold text-white font-mono">{pt.point_name}</h3>
+                  <h3
+                    onClick={() => onSelectPointTrend(pt)}
+                    className="text-sm font-semibold font-mono text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    {pt.point_name}
+                  </h3>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <StatusBadge point={pt} />
-
-                  {/* Delete Card Button */}
                   <button
                     onClick={() => onDeletePoint(pt.point_name)}
-                    className="p-1.5 rounded-md text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition cursor-pointer"
+                    className="p-1 rounded text-slate-500 hover:text-red-400 transition cursor-pointer"
                     title={`Delete ${pt.point_name}`}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
 
               {/* Central Value */}
-              <div className="my-4 p-3.5 rounded-lg bg-[#0d131f] border border-[#1f293d] flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] text-slate-400 font-medium mb-0.5">Live Reading</div>
-                  <div className="flex items-baseline">
-                    <span className={`text-2xl font-bold font-mono tracking-tight ${reading.statusClass}`}>
-                      {reading.displayText}
-                    </span>
-                    {reading.isTemp && <span className="text-xs font-medium text-slate-400 ml-1.5">&deg;C</span>}
-                  </div>
+              <div
+                className="my-3 p-3 rounded"
+                style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
+              >
+                <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-0.5">
+                  Live Telemetry
                 </div>
-
-                {reading.isTemp && (
-                  <div className="text-right">
-                    <div className="text-[11px] text-slate-400 font-medium mb-0.5">Limit Threshold</div>
-                    <div className="text-xs font-mono font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20 inline-block">
-                      &ge; {pt.alert_threshold}&deg;C
-                    </div>
-                  </div>
-                )}
+                <div className="flex items-baseline justify-between">
+                  <span className={`text-xl font-bold font-mono ${reading.statusClass}`}>
+                    {reading.displayText}{reading.isTemp ? ' °C' : ''}
+                  </span>
+                  {reading.isTemp && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      Limit: &ge;{pt.alert_threshold}°C
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Capacity Progress Bar */}
               {reading.isTemp && (
-                <div className="space-y-1 mb-4">
-                  <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                    <span>0&deg;C</span>
-                    <span className="text-slate-300">{pct.toFixed(0)}% Limit Capacity</span>
-                    <span>{pt.alert_threshold}&deg;C</span>
-                  </div>
-                  <div className="w-full bg-[#0d131f] rounded-full h-2 overflow-hidden border border-[#1f293d]">
+                <div className="space-y-1 mb-3">
+                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-300 ${reading.isAlarm ? 'bg-red-500' : 'bg-blue-500'
-                        }`}
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        reading.isAlarm ? 'bg-red-500' : 'bg-cyan-500'
+                      }`}
                       style={{ width: `${pct}%` }}
-                    ></div>
+                    />
                   </div>
                 </div>
               )}
             </div>
 
             {/* Bottom Footer */}
-            <div className="flex items-center justify-between pt-3 border-t border-[#1f293d] text-xs text-slate-400 mt-2">
-              <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
+            <div className="flex items-center justify-between pt-2.5 border-t border-[#282a32] text-xs text-slate-400">
+              <div className="flex items-center gap-1 text-[11px] font-mono text-slate-500">
+                <Clock className="w-3 h-3" />
                 <span>{new Date(pt.updated_at).toLocaleTimeString()}</span>
               </div>
 
               <button
                 onClick={() => onSelectPointTrend(pt)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700 transition cursor-pointer"
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium text-slate-300 hover:text-white transition cursor-pointer"
+                style={{ backgroundColor: '#17181c', border: '1px solid #2d3038' }}
               >
-                <TrendingUp className="w-3.5 h-3.5 text-blue-400" /> View Trend
+                <TrendingUp className="w-3 h-3 text-cyan-400" />
+                <span>Trend</span>
               </button>
             </div>
           </div>

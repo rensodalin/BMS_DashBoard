@@ -20,7 +20,6 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
 
     loadData(true);
 
-    // Auto-poll historical trend readings every 3 seconds to keep chart live
     const interval = setInterval(() => {
       loadData(false);
     }, 3000);
@@ -40,7 +39,6 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
 
   const reading = formatPointReading(point);
 
-  // Check if this point is an Enum or Boolean Point
   const nameLower = point.point_name.toLowerCase();
   const displayLower = (point.display_value || '').toLowerCase();
 
@@ -56,7 +54,6 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
 
   const isBool = !reading.isTemp && !isEnum;
 
-  // Enum Y-Axis Tick Label Formatter
   const enumYFormatter = (val: number) => {
     switch (Math.round(val)) {
       case 1:
@@ -72,12 +69,10 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
     }
   };
 
-  // Boolean Y-Axis Tick Label Formatter (1 = Energized, 0 = De-Energized)
   const boolYFormatter = (val: number) => {
     return Math.round(val) === 1 ? 'Energized' : 'De-Energized';
   };
 
-  // Export readings to CSV file for Excel
   const handleExportExcel = () => {
     if (!point || readings.length === 0) return;
 
@@ -97,7 +92,6 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
     exportToCsv(`${point.point_name}_trend_${dateStr}.csv`, headers, rows);
   };
 
-  // Dynamic calculation of High and Low Limits for Temperature points
   const nameNorm = point.point_name.toLowerCase().replace(/[\s_]+/g, '');
   let lowLimit = point.low_limit;
   let highLimit = point.high_limit || point.alert_threshold || 30.0;
@@ -106,7 +100,7 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
     if (nameNorm.includes('room1')) lowLimit = 18.0;
     else if (nameNorm.includes('room2')) lowLimit = 12.0;
     else if (nameNorm.includes('room3')) lowLimit = 20.0;
-    else lowLimit = 20.0; // Default Low Limit
+    else lowLimit = 20.0;
   }
 
   const chartData = readings.map((r) => ({
@@ -115,99 +109,108 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
   }));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fadeIn">
-      <div className="bms-panel w-full max-w-3xl rounded-2xl border border-[#23314a] p-6 relative">
-        
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs select-none">
+      <div
+        className="w-full max-w-3xl rounded p-5 relative"
+        style={{ backgroundColor: '#202227', border: '1px solid #2d3038' }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-[#1f293d] mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-500/30">
-              <TrendingUp className="w-5 h-5" />
+        <div className="flex items-center justify-between pb-3 mb-4" style={{ borderBottom: '1px solid #282a32' }}>
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded" style={{ backgroundColor: 'rgba(0, 164, 228, 0.15)', color: '#00a4e4' }}>
+              <TrendingUp className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-mono font-semibold text-white">{point.point_name}</h3>
-                <span className="px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 text-slate-300">
+                <h3 className="text-sm font-mono font-bold text-white">{point.point_name}</h3>
+                <span
+                  className="px-1.5 py-0.5 rounded text-[11px] font-mono text-slate-300"
+                  style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
+                >
                   {point.device_name || 'Niagara Controller'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">Historical Time-Series Telemetry Trend</p>
+              <p className="text-[11px] text-slate-400">Historical Time-Series Telemetry Trend</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Export to Excel Button */}
             <button
               onClick={handleExportExcel}
               disabled={readings.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-medium transition disabled:opacity-50 cursor-pointer"
-              title="Export trend telemetry data to Excel (.csv)"
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium text-emerald-400 hover:text-emerald-300 transition cursor-pointer disabled:opacity-50"
+              style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
+              title="Export CSV"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export Excel</span>
+              <span>Export CSV</span>
             </button>
 
             <button
               onClick={() => loadData(true)}
               disabled={isLoading}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
-              title="Refresh telemetry"
+              className="p-1 rounded text-slate-400 hover:text-white transition cursor-pointer"
+              style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
+              title="Refresh"
             >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-blue-400' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-cyan-400' : ''}`} />
             </button>
             
             <button
               onClick={onClose}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              className="p-1 rounded text-slate-400 hover:text-white transition cursor-pointer"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Live Metric Display (Dynamic Real-Time Text Status) */}
-        <div className="mb-6">
-          <div className="p-4 rounded-xl bg-[#0d131f] border border-[#1f293d] flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-400 font-medium mb-1">Live Reading</div>
-              <div className={`text-2xl font-bold font-mono ${reading.statusClass}`}>
-                {reading.displayText}{reading.isTemp ? ' °C' : ''}
-              </div>
+        {/* Live Metric */}
+        <div
+          className="p-3 rounded mb-4 flex items-center justify-between"
+          style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
+        >
+          <div>
+            <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-0.5">Live Telemetry</div>
+            <div className={`text-xl font-bold font-mono ${reading.statusClass}`}>
+              {reading.displayText}{reading.isTemp ? ' °C' : ''}
             </div>
-            <div className="text-right text-xs text-slate-400 font-mono">
-              Last Sync: {point.updated_at ? new Date(point.updated_at).toLocaleTimeString() : 'Live'}
-            </div>
+          </div>
+          <div className="text-right text-[11px] text-slate-500 font-mono">
+            Last Sync: {point.updated_at ? new Date(point.updated_at).toLocaleTimeString() : 'Live'}
           </div>
         </div>
 
         {/* Recharts Area Chart */}
-        <div className="h-64 w-full bg-[#0d131f] rounded-xl p-4 border border-[#1f293d] relative">
+        <div
+          className="h-64 w-full rounded p-3 relative"
+          style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
+        >
           {isLoading && chartData.length === 0 ? (
             <div className="h-full flex items-center justify-center text-xs text-slate-400 gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
-              <span>Loading trend data...</span>
+              <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
+              <span>Loading trend readings...</span>
             </div>
           ) : chartData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xs text-slate-400 font-mono">
-              No historical log samples recorded yet for this point.
+            <div className="h-full flex items-center justify-center text-xs text-slate-500 font-mono">
+              No historical samples recorded yet for this point.
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
-                  <linearGradient id="cleanBlueGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                  <linearGradient id="honeywellCyanGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#00a4e4" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#00a4e4" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f293d" />
-                <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#282a32" />
+                <XAxis dataKey="time" stroke="#64748b" tick={{ fontSize: 10, fill: '#8b929e' }} />
                 
-                {/* Y-Axis: Format ticks dynamically for Enum vs Boolean vs Temperature */}
                 {isEnum ? (
                   <YAxis
                     stroke="#64748b"
-                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    tick={{ fontSize: 10, fill: '#8b929e' }}
                     ticks={[1, 2, 3, 4]}
                     domain={[0.5, 4.5]}
                     tickFormatter={enumYFormatter}
@@ -215,22 +218,22 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
                 ) : isBool ? (
                   <YAxis
                     stroke="#64748b"
-                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    tick={{ fontSize: 10, fill: '#8b929e' }}
                     ticks={[0, 1]}
                     domain={[-0.25, 1.25]}
                     tickFormatter={boolYFormatter}
                   />
                 ) : (
-                  <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                  <YAxis stroke="#64748b" tick={{ fontSize: 10, fill: '#8b929e' }} />
                 )}
 
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#111827',
-                    borderColor: '#1f293d',
-                    borderRadius: '0.5rem',
-                    color: '#fff',
-                    fontSize: '12px',
+                    backgroundColor: '#121316',
+                    borderColor: '#2d3038',
+                    borderRadius: '4px',
+                    color: '#ffffff',
+                    fontSize: '11px',
                   }}
                   formatter={(value: any) => {
                     if (isEnum) return [enumYFormatter(Number(value)), 'Status'];
@@ -241,19 +244,17 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
 
                 {reading.isTemp && (
                   <>
-                    {/* High Limit Reference Line (Red Dashed) */}
                     <ReferenceLine
                       y={highLimit}
-                      stroke="#ef4444"
+                      stroke="#e52b20"
                       strokeDasharray="3 3"
-                      label={{ value: `High Limit (${highLimit}°C)`, fill: '#ef4444', fontSize: 10, position: 'top' }}
+                      label={{ value: `High Limit (${highLimit}°C)`, fill: '#e52b20', fontSize: 10, position: 'top' }}
                     />
-                    {/* Low Limit Reference Line (Amber/Orange Dashed) */}
                     <ReferenceLine
                       y={lowLimit}
-                      stroke="#f59e0b"
+                      stroke="#fa8c16"
                       strokeDasharray="3 3"
-                      label={{ value: `Low Limit (${lowLimit}°C)`, fill: '#f59e0b', fontSize: 10, position: 'bottom' }}
+                      label={{ value: `Low Limit (${lowLimit}°C)`, fill: '#fa8c16', fontSize: 10, position: 'bottom' }}
                     />
                   </>
                 )}
@@ -261,10 +262,10 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke="#3b82f6"
+                  stroke="#00a4e4"
                   strokeWidth={2}
                   fillOpacity={1}
-                  fill="url(#cleanBlueGradient)"
+                  fill="url(#honeywellCyanGradient)"
                 />
               </AreaChart>
             </ResponsiveContainer>

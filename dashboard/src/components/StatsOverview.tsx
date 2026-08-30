@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { SensorPoint } from '../types/bms';
-import { Zap, ShieldCheck, Activity, CloudSun, Droplets, TrendingUp } from 'lucide-react';
+import { Cloud, Zap, ShieldCheck, Activity, CloudSun, Droplets, TrendingUp } from 'lucide-react';
+import { formatPointReading } from './PointsGrid';
 
 interface StatsOverviewProps {
   points: SensorPoint[];
@@ -100,55 +101,64 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ points, onOpenWeat
     };
 
     fetchWeather();
-    const timer = setInterval(fetchWeather, 300000); // 5 minutes poll
+    const timer = setInterval(fetchWeather, 300000);
     return () => clearInterval(timer);
   }, []);
 
-  // 1. Pump System (Dynamic detection of Pumps & Fans)
   const runningPumps = points.filter(isPumpRunning).length;
-
-  // 2. Electrical System (Dynamic detection of ACB Breakers)
   const energizedElectrical = points.filter(isAcbEnergized).length;
+  const activeAlarms = points.filter((p) => formatPointReading(p).isAlarm).length;
+  const tempSensors = points.filter((p) => formatPointReading(p).isTemp).length;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-3 select-none">
       
-      {/* Card 1: Station Connectivity */}
-      <div className="bms-panel p-4 rounded-xl border border-[#1e2638] bg-[#131924]">
-        <div className="text-xs font-medium text-slate-400 mb-2">Connectivity</div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>• Online</span>
+      {/* ── Card 1: Connectivity ── */}
+      <div className="hw-panel p-3.5 flex flex-col justify-between">
+        <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
+          <span>Connectivity</span>
+          <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+        </div>
+        <div>
+          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 hw-pulse" />
+            <span>Online</span>
           </div>
-          <div className="text-[11px] text-slate-400 font-mono">
-            {totalPoints}/{totalPoints} CONNECTIVITY
+          <div className="text-[11px] font-mono text-slate-300 mt-1">
+            <span className="font-bold text-white text-base">{totalPoints}/{totalPoints}</span>
+            <span className="text-slate-400 text-[10px] ml-1 uppercase">Devices</span>
           </div>
+        </div>
+        <div className="text-[10px] text-slate-500 font-mono mt-1">
+          Niagara Driver Connected
         </div>
       </div>
 
-      {/* Card 2: System Telemetry Stream */}
-      <div className="bms-panel p-4 rounded-xl border border-[#1e2638] bg-[#131924]">
-        <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+      {/* ── Card 2: System Telemetry ── */}
+      <div className="hw-panel p-3.5 flex flex-col justify-between">
+        <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
           <span>System Telemetry</span>
-          <Activity className="w-3.5 h-3.5 text-blue-400" />
+          <Activity className="w-3.5 h-3.5 text-cyan-400" />
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-bold font-mono text-white">{totalPoints}</span>
-          <span className="text-xs text-blue-400 font-mono">Live Points</span>
+          <span className="text-xs text-cyan-400 font-mono">Live Points</span>
+        </div>
+        <div className="text-[10px] text-slate-500 font-mono">
+          {tempSensors} Temps • {totalPoints - tempSensors} Status/Enums
         </div>
       </div>
 
-      {/* Card 3: Outdoor Weather (Phnom Penh Ambient Monitor with View Trend) */}
-      <div className="bms-panel p-4 rounded-xl border border-[#1e2638] bg-[#131924] relative group">
-        <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+      {/* ── Card 3: Outdoor Weather (Phnom Penh Ambient) ── */}
+      <div className="hw-panel p-3.5 flex flex-col justify-between relative group">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
           <span className="flex items-center gap-1">
-            <CloudSun className="w-3.5 h-3.5 text-amber-400" /> Phnom Penh Ambient
+            <CloudSun className="w-3.5 h-3.5 text-amber-500" /> Phnom Penh Ambient
           </span>
           {onOpenWeatherTrend && (
             <button
               onClick={onOpenWeatherTrend}
-              className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition cursor-pointer font-mono bg-blue-500/10 hover:bg-blue-500/20 px-1.5 py-0.5 rounded border border-blue-500/20"
+              className="flex items-center gap-0.5 text-[10px] text-cyan-400 hover:text-cyan-300 transition cursor-pointer font-mono"
               title="View Weather Trend Chart"
             >
               <TrendingUp className="w-3 h-3" /> Trend
@@ -156,11 +166,11 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ points, onOpenWeat
           )}
         </div>
         <div
-          className="flex items-baseline justify-between mt-1 cursor-pointer"
+          className="flex items-baseline justify-between cursor-pointer"
           onClick={onOpenWeatherTrend}
         >
           <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold font-mono text-amber-400">{weather.temp.toFixed(1)}</span>
+            <span className="text-2xl font-bold font-mono text-amber-500">{weather.temp.toFixed(1)}</span>
             <span className="text-xs text-slate-400">°C</span>
           </div>
           <div className="flex items-center gap-1 text-xs text-cyan-400 font-mono">
@@ -168,11 +178,14 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ points, onOpenWeat
             <span>{weather.humidity}% RH</span>
           </div>
         </div>
+        <div className="text-[10px] text-slate-500 font-mono">
+          AccuWeather Station 49785
+        </div>
       </div>
 
-      {/* Card 4: Pump System */}
-      <div className="bms-panel p-4 rounded-xl border border-[#1e2638] bg-[#131924]">
-        <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+      {/* ── Card 4: Pump System ── */}
+      <div className="hw-panel p-3.5 flex flex-col justify-between">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
           <span>Pump System</span>
           <Zap className="w-3.5 h-3.5 text-cyan-400" />
         </div>
@@ -180,17 +193,23 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ points, onOpenWeat
           <span className="text-2xl font-bold font-mono text-cyan-400">{runningPumps}</span>
           <span className="text-xs text-slate-400">Pumps Active</span>
         </div>
+        <div className="text-[10px] text-slate-500 font-mono">
+          Motor Status Running
+        </div>
       </div>
 
-      {/* Card 5: Electrical System */}
-      <div className="bms-panel p-4 rounded-xl border border-[#1e2638] bg-[#131924]">
-        <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+      {/* ── Card 5: Electrical System ── */}
+      <div className="hw-panel p-3.5 flex flex-col justify-between">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
           <span>Electrical System</span>
-          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+          <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold font-mono text-amber-400">{energizedElectrical}</span>
+          <span className="text-2xl font-bold font-mono text-amber-500">{energizedElectrical}</span>
           <span className="text-xs text-slate-400">ACB Energized</span>
+        </div>
+        <div className="text-[10px] font-mono" style={{ color: activeAlarms > 0 ? '#ef4444' : '#48bb78' }}>
+          {activeAlarms > 0 ? `${activeAlarms} Active Alerts` : 'All Breakers Normal'}
         </div>
       </div>
 

@@ -12,8 +12,29 @@ import { PointTrendModal } from './components/PointTrendModal';
 import { WeatherTrendModal } from './components/WeatherTrendModal';
 import { EquipmentHealthWorkspace } from './components/EquipmentHealthWorkspace';
 import { BillingWorkspace } from './components/billing';
-import { Search, LayoutGrid, ListFilter, AlertTriangle, Zap, Thermometer, SlidersHorizontal } from 'lucide-react';
+import { Search, LayoutGrid, ListFilter, Bell, ChevronLeft, ChevronRight, Zap, Thermometer, X } from 'lucide-react';
 import { exportToCsv } from './lib/exportCsv';
+
+export type WorkspaceTab = 'SUMMARY' | 'SPACES' | 'EQUIPMENT' | 'DEVICES' | 'POINTS';
+
+export function isBillingPoint(pt: SensorPoint): boolean {
+  const name = pt.point_name.toLowerCase();
+  const dev = (pt.device_name || '').toLowerCase();
+  const display = (pt.display_value || '').toLowerCase();
+  return (
+    name.includes('tenant') ||
+    name.includes('billing') ||
+    name.includes('kwh') ||
+    name.includes('kw-hr') ||
+    name.includes('meter') ||
+    name.includes('energy_meter') ||
+    dev.includes('billing') ||
+    dev.includes('tenant') ||
+    dev.includes('meter') ||
+    display.includes('kwh') ||
+    display.includes('kw-hr')
+  );
+}
 
 export const App: React.FC = () => {
   const [points, setPoints] = useState<SensorPoint[]>([]);
@@ -25,7 +46,7 @@ export const App: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('ALL');
   const [viewMode, setViewMode] = useState<'GRID' | 'TABLE'>('TABLE');
-  const [workspaceTab, setWorkspaceTab] = useState<'SUMMARY' | 'POINTS' | 'EQUIPMENT'>('SUMMARY');
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('SUMMARY');
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -36,22 +57,18 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadPoints(true);
 
-    // Supabase Realtime WebSocket Listener on sensor_points table
     const channel = supabase
       .channel('realtime_sensor_points')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sensor_points' },
         (payload) => {
-          // 1. DELETE event
           if (payload.eventType === 'DELETE') {
             const oldName = (payload.old as any)?.point_name;
             if (oldName) {
               setPoints((prev) => prev.filter((p) => p.point_name !== oldName));
             }
-          }
-          // 2. UPDATE / INSERT event
-          else if (payload.new && (payload.new as any).point_name) {
+          } else if (payload.new && (payload.new as any).point_name) {
             const updatedPt = payload.new as SensorPoint;
             setPoints((prev) => {
               const idx = prev.findIndex((p) => p.point_name === updatedPt.point_name);
@@ -87,19 +104,18 @@ export const App: React.FC = () => {
       return;
     }
 
-    // Optimistically update UI
     setPoints((prev) => prev.filter((p) => p.point_name !== pointName));
 
     const ok = await deleteSensorPoint(pointName);
     if (!ok) {
       alert(`Failed to delete "${pointName}" from database. Check Supabase connection.`);
-      loadPoints(false); // Rollback if error
+      loadPoints(false);
     }
   };
 
   // Export all monitored points to CSV for Excel
   const handleExportAll = () => {
-    if (points.length === 0) return;
+    if (dashboardPoints.length === 0) return;
 
     const headers = [
       'Device Name',
@@ -111,7 +127,7 @@ export const App: React.FC = () => {
       'Last Sync Timestamp',
     ];
 
-    const rows = points.map((pt) => {
+    const rows = dashboardPoints.map((pt) => {
       const reading = formatPointReading(pt);
       const valStr = reading.isTemp
         ? `${pt.current_value.toFixed(1)} °C`
@@ -132,10 +148,14 @@ export const App: React.FC = () => {
     exportToCsv(`BMS_Points_Report_${dateStr}.csv`, headers, rows);
   };
 
-  // Filtered Points logic
+  // Separate operational building points from billing energy meter points
+  const dashboardPoints = useMemo(() => {
+    return points.filter((pt) => !isBillingPoint(pt));
+  }, [points]);
+
+  // Filtered Points logic for dashboard table
   const filteredPoints = useMemo(() => {
-    return points.filter((pt) => {
-      // 1. Search Query Filter
+    return dashboardPoints.filter((pt) => {
       const search = searchQuery.toLowerCase().trim();
       const matchSearch =
         !search ||
@@ -144,7 +164,6 @@ export const App: React.FC = () => {
 
       if (!matchSearch) return false;
 
-      // 2. Category Tab Filter
       const reading = formatPointReading(pt);
       const nameLower = pt.point_name.toLowerCase();
 
@@ -155,28 +174,35 @@ export const App: React.FC = () => {
 
       return true;
     });
-  }, [points, searchQuery, activeFilter]);
+  }, [dashboardPoints, searchQuery, activeFilter]);
 
   const activeAlarmsCount = useMemo(() => {
-    return points.filter((pt) => formatPointReading(pt).isAlarm).length;
-  }, [points]);
+    return dashboardPoints.filter((pt) => formatPointReading(pt).isAlarm).length;
+  }, [dashboardPoints]);
 
-  // Dynamically lookup live point object for trend modal
+  const runningCount = useMemo(() => {
+    return dashboardPoints.filter((pt) => isEquipmentRunning(pt)).length;
+  }, [dashboardPoints]);
+
+  const tempsCount = useMemo(() => {
+    return dashboardPoints.filter((pt) => formatPointReading(pt).isTemp).length;
+  }, [dashboardPoints]);
+
   const liveTrendPoint = useMemo(() => {
     if (!selectedTrendPoint) return null;
-    return points.find((p) => p.point_name === selectedTrendPoint.point_name) || selectedTrendPoint;
-  }, [points, selectedTrendPoint]);
+    return dashboardPoints.find((p) => p.point_name === selectedTrendPoint.point_name) || selectedTrendPoint;
+  }, [dashboardPoints, selectedTrendPoint]);
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-slate-100 flex font-sans">
+    <div className="min-h-screen flex" style={{ backgroundColor: '#17181c', color: '#ffffff' }}>
       
-      {/* Honeywell Style Left Vertical Sidebar */}
+      {/* ── Leftmost Vertical Navigation Rail ── */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* Main Workspace Layout Area */}
+      {/* ── Main Workspace Area ── */}
       <div className="flex-1 flex flex-col min-w-0">
         
-        {/* Honeywell Top Navigation Header */}
+        {/* Top Header & Breadcrumb Bar */}
         <Header
           onOpenAddModal={() => setIsAddModalOpen(true)}
           onRefresh={() => loadPoints(true)}
@@ -184,137 +210,212 @@ export const App: React.FC = () => {
           isRefreshing={isRefreshing}
         />
 
-        {/* Workspace Body Grid */}
-        <main className="p-6 flex flex-col lg:flex-row gap-6 max-w-[1600px] mx-auto w-full">
+        {/* Main Body Grid */}
+        <main className="p-4 flex flex-col lg:flex-row gap-3 max-w-[1680px] w-full mx-auto">
           
-          {/* Left Column: Building Photo, Healthy Score, Alarm Feed */}
-          <LeftBuildingPanel points={points} />
+          {/* Left Column: Building Photo, Healthy Score, Alarm Metrics (Hidden in Equipment Health & Billing views) */}
+          {activeTab !== 'equipment' && workspaceTab !== 'EQUIPMENT' && activeTab !== 'billing' && (
+            <LeftBuildingPanel points={dashboardPoints} />
+          )}
 
           {/* Right Main Content Workspace */}
           <div className="flex-1 min-w-0 flex flex-col">
             
             {activeTab !== 'billing' && (
               <>
-                {/* Honeywell Top Metrics Row + Phnom Penh Weather Monitor */}
-                <StatsOverview
-                  points={points}
-                  onOpenWeatherTrend={() => setIsWeatherTrendOpen(true)}
-                />
+                {/* Top Metrics Row: Displayed on main dashboard, hidden on Equipment Health */}
+                {activeTab !== 'equipment' && workspaceTab !== 'EQUIPMENT' && (
+                  <StatsOverview
+                    points={dashboardPoints}
+                    onOpenWeatherTrend={() => setIsWeatherTrendOpen(true)}
+                  />
+                )}
 
-                {/* Honeywell Workspace Tabs & Type Filters Bar */}
-                <div className="bms-panel rounded-xl mb-6 border border-[#1e2638] bg-[#131924]">
+                {/* ── Honeywell Workspace Tabs & Type Filter Bar ── */}
+                <div className="hw-panel mb-3 overflow-hidden select-none">
                   
-                  {/* Top Level Section Tabs */}
-                  <div className="px-5 pt-3 flex items-center justify-between border-b border-[#1e2638] overflow-x-auto">
-                    
+                  {/* Row 1: Workspace Tabs (Left) + Filter Pills (Right) */}
+                  <div
+                    className="px-3 flex flex-wrap items-center justify-between gap-3 overflow-x-auto"
+                    style={{ borderBottom: '1px solid #282a32', minHeight: '40px' }}
+                  >
+                    {/* Left Tabs: SUMMARY / SPACES / EQUIPMENT / DEVICES / POINTS */}
                     <div className="flex items-center gap-6">
-                      {(['SUMMARY', 'POINTS', 'EQUIPMENT'] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          onClick={() => setWorkspaceTab(tab)}
-                          className={`pb-3 text-xs font-bold tracking-wider transition cursor-pointer relative ${
-                            workspaceTab === tab || (activeTab === 'equipment' && tab === 'EQUIPMENT') ? 'text-blue-400' : 'text-slate-400 hover:text-slate-200'
-                          }`}
-                        >
-                          {tab}
-                          {(workspaceTab === tab || (activeTab === 'equipment' && tab === 'EQUIPMENT')) && (
-                            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500 rounded-t"></span>
-                          )}
-                        </button>
-                      ))}
+                      {(['SUMMARY', 'SPACES', 'EQUIPMENT', 'DEVICES', 'POINTS'] as const).map((tab) => {
+                        const isActive =
+                          (workspaceTab === tab && activeTab !== 'equipment') ||
+                          (activeTab === 'equipment' && tab === 'EQUIPMENT') ||
+                          (activeTab === 'points' && tab === 'POINTS');
+
+                        return (
+                          <button
+                            key={tab}
+                            onClick={() => {
+                              setWorkspaceTab(tab);
+                              if (tab === 'EQUIPMENT') setActiveTab('equipment');
+                              else if (activeTab === 'equipment') setActiveTab('dashboard');
+                            }}
+                            className={`hw-tab-btn ${isActive ? 'active' : ''}`}
+                          >
+                            {tab}
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    {/* Grid vs Table View Switcher */}
+                    {/* Right Filter Pills & Chevron Navigation */}
                     {workspaceTab !== 'EQUIPMENT' && activeTab !== 'equipment' && (
-                      <div className="flex items-center gap-1 p-1 rounded-lg bg-[#0c1018] border border-[#1e2638] mb-2">
+                      <div className="flex items-center gap-1.5 py-1">
                         <button
-                          onClick={() => setViewMode('TABLE')}
-                          className={`p-1.5 rounded text-xs transition cursor-pointer ${
-                            viewMode === 'TABLE' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                          }`}
-                          title="Table View"
+                          className="p-1 text-slate-500 hover:text-white transition cursor-pointer"
+                          title="Previous"
                         >
-                          <ListFilter className="w-4 h-4" />
+                          <ChevronLeft className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => setViewMode('GRID')}
-                          className={`p-1.5 rounded text-xs transition cursor-pointer ${
-                            viewMode === 'GRID' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
-                          }`}
-                          title="Grid View"
-                        >
-                          <LayoutGrid className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-
-                  </div>
-
-                  {/* Sub-Filters: Type Selector Pills & Search Input */}
-                  {workspaceTab !== 'EQUIPMENT' && activeTab !== 'equipment' && (
-                    <div className="p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-                      
-                      {/* Type Filter Pills */}
-                      <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto">
-                        <span className="text-[11px] font-mono text-slate-500 mr-1 flex items-center gap-1">
-                          <SlidersHorizontal className="w-3 h-3" /> TYPE:
-                        </span>
 
                         <button
                           onClick={() => setActiveFilter('ALL')}
-                          className={`px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                            activeFilter === 'ALL'
-                              ? 'bg-blue-600 text-white shadow-sm'
-                              : 'bg-[#0c1018] text-slate-400 hover:text-white hover:bg-slate-800'
-                          }`}
+                          className={`hw-filter-pill ${activeFilter === 'ALL' ? 'active' : ''}`}
                         >
-                          ALL TYPES ({points.length})
+                          ALL TYPES ({dashboardPoints.length})
                         </button>
 
                         <button
                           onClick={() => setActiveFilter('TEMPERATURES')}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                            activeFilter === 'TEMPERATURES'
-                              ? 'bg-emerald-600 text-white shadow-sm'
-                              : 'bg-[#0c1018] text-slate-400 hover:text-emerald-400 hover:bg-slate-800'
-                          }`}
+                          className={`hw-filter-pill flex items-center gap-1 ${activeFilter === 'TEMPERATURES' ? 'active' : ''}`}
                         >
-                          <Thermometer className="w-3 h-3" /> TEMPS
+                          <Thermometer className="w-3 h-3 text-cyan-400" />
+                          <span>TEMPS ({tempsCount})</span>
                         </button>
 
                         <button
                           onClick={() => setActiveFilter('RUNNING')}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                            activeFilter === 'RUNNING'
-                              ? 'bg-cyan-600 text-white shadow-sm'
-                              : 'bg-[#0c1018] text-slate-400 hover:text-cyan-300 hover:bg-slate-800'
-                          }`}
+                          className={`hw-filter-pill flex items-center gap-1 ${activeFilter === 'RUNNING' ? 'active' : ''}`}
                         >
-                          <Zap className="w-3 h-3" /> RUNNING
+                          <Zap className="w-3 h-3 text-emerald-400" />
+                          <span>RUNNING ({runningCount})</span>
                         </button>
 
                         <button
                           onClick={() => setActiveFilter('ALARMS')}
-                          className={`flex items-center gap-1 px-3 py-1 rounded-md text-xs font-semibold transition cursor-pointer ${
-                            activeFilter === 'ALARMS'
-                              ? 'bg-red-600 text-white shadow-sm'
-                              : 'bg-[#0c1018] text-slate-400 hover:text-red-400 hover:bg-slate-800'
-                          }`}
+                          className={`hw-filter-pill flex items-center gap-1 ${activeFilter === 'ALARMS' ? 'active' : ''}`}
                         >
-                          <AlertTriangle className="w-3 h-3" /> ALARMS ({activeAlarmsCount})
+                          {activeAlarmsCount > 0 ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 hw-pulse" />
+                          ) : (
+                            <Bell className="w-3 h-3 text-slate-500" />
+                          )}
+                          <span style={{ color: activeAlarmsCount > 0 ? '#ef4444' : undefined }}>
+                            ALARMS ({activeAlarmsCount})
+                          </span>
                         </button>
+
+                        <button
+                          className="p-1 text-slate-500 hover:text-white transition cursor-pointer flex items-center gap-0.5 text-[11px] font-semibold uppercase text-slate-400"
+                          title="More filters"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                          <span>6 more</span>
+                        </button>
+
+                        {/* View Switcher Table / Grid */}
+                        <div
+                          className="flex items-center p-0.5 rounded ml-2"
+                          style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
+                        >
+                          <button
+                            onClick={() => setViewMode('TABLE')}
+                            className="p-1 rounded transition cursor-pointer"
+                            style={{
+                              backgroundColor: viewMode === 'TABLE' ? '#00a4e4' : 'transparent',
+                              color: viewMode === 'TABLE' ? '#ffffff' : '#6b7280',
+                            }}
+                            title="Table View"
+                          >
+                            <ListFilter className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setViewMode('GRID')}
+                            className="p-1 rounded transition cursor-pointer"
+                            style={{
+                              backgroundColor: viewMode === 'GRID' ? '#00a4e4' : 'transparent',
+                              color: viewMode === 'GRID' ? '#ffffff' : '#6b7280',
+                            }}
+                            title="Grid View"
+                          >
+                            <LayoutGrid className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Row 2: Status Count Strip + Search */}
+                  {workspaceTab !== 'EQUIPMENT' && activeTab !== 'equipment' && (
+                    <div className="px-3.5 py-2 flex items-center justify-between gap-4">
+                      
+                      {/* Left Summary Metric Counters */}
+                      <div className="flex items-center gap-6">
+                        {/* ALL Count */}
+                        <div className="flex flex-col items-start leading-none">
+                          <span className="font-bold font-mono text-white text-base">
+                            {filteredPoints.length}
+                          </span>
+                          <span className="text-[9px] font-bold uppercase text-slate-500 tracking-wider mt-0.5">
+                            ALL
+                          </span>
+                        </div>
+
+                        {/* RUNNING Count */}
+                        <div className="flex items-center gap-1.5 leading-none">
+                          <Zap className="w-3.5 h-3.5 text-cyan-400" />
+                          <div className="flex flex-col items-start">
+                            <span className="font-bold font-mono text-cyan-400 text-base">
+                              {runningCount}
+                            </span>
+                            <span className="text-[9px] font-bold uppercase text-slate-500 tracking-wider mt-0.5">
+                              RUNNING
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* ACTIVE HIGH ALARMS Count */}
+                        <div className="flex items-center gap-1.5 leading-none">
+                          <Bell className={`w-3.5 h-3.5 ${activeAlarmsCount > 0 ? 'text-red-500' : 'text-slate-500'}`} />
+                          <div className="flex flex-col items-start">
+                            <span className={`font-bold font-mono text-base ${activeAlarmsCount > 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                              {activeAlarmsCount}
+                            </span>
+                            <span className="text-[9px] font-bold uppercase text-slate-500 tracking-wider mt-0.5">
+                              ACTIVE HIGH ALARMS
+                            </span>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Search Bar */}
-                      <div className="relative w-full md:w-64">
-                        <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                      {/* Right Search Input */}
+                      <div className="hw-search-box">
+                        <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input
                           type="text"
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search points..."
-                          className="w-full pl-8 pr-[#0c1018] py-1 rounded-md bms-input text-xs font-normal placeholder:text-slate-500 bg-[#0c1018] border-[#1e2638]"
+                          placeholder="Search sensor points..."
+                          spellCheck={false}
                         />
+                        {searchQuery ? (
+                          <button
+                            onClick={() => setSearchQuery('')}
+                            className="p-1 mr-1 text-slate-500 hover:text-white transition cursor-pointer"
+                            title="Clear search"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <span className="text-[10px] font-mono text-slate-600 border border-[#2d3038] px-1 py-0.2 rounded mr-1.5 select-none pointer-events-none">
+                            /
+                          </span>
+                        )}
                       </div>
 
                     </div>
@@ -324,11 +425,11 @@ export const App: React.FC = () => {
               </>
             )}
 
-            {/* Points Data Workspace vs Drag & Drop Equipment Workspace vs Billing Workspace */}
+            {/* Workspace Body: Points Table / Grid / Equipment Health / Billing */}
             {isLoading ? (
-              <div className="bms-panel p-16 rounded-xl text-center text-slate-400 border border-[#1e2638] bg-[#131924]">
-                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                <p className="text-xs text-slate-300 font-medium">Connecting to Supabase Realtime...</p>
+              <div className="hw-panel p-16 text-center">
+                <div className="w-7 h-7 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <p className="text-xs text-slate-400 font-mono">Synchronizing Realtime Telemetry...</p>
               </div>
             ) : activeTab === 'billing' ? (
               <BillingWorkspace points={points} />
