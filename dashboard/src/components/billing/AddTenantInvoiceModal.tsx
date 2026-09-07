@@ -40,6 +40,7 @@ interface AddTenantInvoiceModalProps {
   ratePerKwh: number;
   existingCount?: number;
   points?: import('../../types/bms').SensorPoint[];
+  existingInvoices?: TenantInvoiceDb[];
 }
 
 export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
@@ -49,6 +50,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
   ratePerKwh,
   existingCount = 0,
   points = [],
+  existingInvoices = [],
 }) => {
   const [obixUrl, setObixUrl] = useState('');
   const [tenantName, setTenantName] = useState('');
@@ -101,10 +103,11 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
         cleanName = cleanName.replace(/\$20/g, ' ').replace(/_/g, ' ').trim();
         setTenantName(cleanName);
 
+        const normTarget = cleanName.toLowerCase().replace(/[\s_\-$]+/g, '');
+
         // Try to match against live telemetry points if available
         let matchedPoint: import('../../types/bms').SensorPoint | undefined;
         if (points && points.length > 0) {
-          const normTarget = cleanName.toLowerCase().replace(/[\s_\-$]+/g, '');
           matchedPoint = points.find((p) => {
             const pNorm = p.point_name.toLowerCase().replace(/[\s_\-$]+/g, '').replace(/(consumption|consumptions|kwh)/gi, '');
             return pNorm === normTarget || p.point_name.toLowerCase().includes(normTarget);
@@ -121,7 +124,21 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
           setMeterName(meterTag);
         }
 
-        if (!unitZone) {
+        // Check if an invoice for this meter or tenant already exists in the system
+        const existingInv = existingInvoices.find((inv) => {
+          const invNorm = (inv.meter_name || inv.tenant_name || '')
+            .toLowerCase()
+            .replace(/[\s_\-$]+/g, '')
+            .replace(/(consumption|consumptions|kwh|meter|facility|tenant)/gi, '');
+          return invNorm === normTarget || (inv.meter_name && inv.meter_name.toLowerCase().includes(normTarget));
+        });
+
+        if (existingInv) {
+          setInvoiceNumber(existingInv.invoice_number);
+          if (existingInv.unit_zone) setUnitZone(existingInv.unit_zone);
+          if (existingInv.demand_charge !== undefined) setDemandCharge(existingInv.demand_charge.toString());
+          if (existingInv.status) setStatus(existingInv.status);
+        } else if (!unitZone) {
           setUnitZone('Commercial Suite 101');
         }
       }

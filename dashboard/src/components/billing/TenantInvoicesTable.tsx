@@ -325,9 +325,8 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
 
           <button
             onClick={() => onStatusFilterChange('OVERDUE')}
-            className={`hw-tab-btn flex items-center gap-1.5 ${
-              statusFilter === 'OVERDUE' ? 'active' : ''
-            }`}
+            className={`hw-tab-btn flex items-center gap-1.5 ${statusFilter === 'OVERDUE' ? 'active' : ''
+              }`}
           >
             <span
               className="w-1.5 h-1.5 rounded-full"
@@ -370,17 +369,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
             </div>
           )}
 
-          {onOpenAddInvoice && (
-            <button
-              onClick={onOpenAddInvoice}
-              className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-white transition cursor-pointer hover:brightness-110"
-              style={{ backgroundColor: '#00a4e4' }}
-              title="Add New Invoice"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Add Invoice</span>
-            </button>
-          )}
+
 
           <button
             onClick={onExportInvoices}
@@ -710,9 +699,8 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                     <td className="py-3.5 px-4 font-mono">
                       <div
                         onClick={() => onSelectTenantTrend && onSelectTenantTrend(inv)}
-                        className={`text-[12px] text-[#cbd5e1] font-medium ${
-                          onSelectTenantTrend ? 'cursor-pointer hover:text-[#00a4e4] transition' : ''
-                        }`}
+                        className={`text-[12px] text-[#cbd5e1] font-medium ${onSelectTenantTrend ? 'cursor-pointer hover:text-[#00a4e4] transition' : ''
+                          }`}
                         title="Click to view telemetry trend"
                       >
                         {inv.meter_name}

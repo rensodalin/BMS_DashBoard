@@ -128,6 +128,19 @@ export const findLiveMeterPoint = (
   return undefined;
 };
 
+export const getMeterIdentityKey = (meterName?: string, tenantName?: string): string => {
+  const norm = (s?: string) =>
+    (s || '')
+      .toLowerCase()
+      .replace(/[\s_\-$]+/g, '')
+      .replace(/(consumption|consumptions|kwh|meter|facility|tenant)/gi, '')
+      .trim();
+
+  const mKey = norm(meterName);
+  if (mKey) return mKey;
+  return norm(tenantName) || 'unknown_meter';
+};
+
 interface BillingWorkspaceProps {
   points?: SensorPoint[];
   isAddInvoiceOpen?: boolean;
@@ -272,20 +285,22 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
   const liveKwh = telemetryTenantInvoices.length > 0 ? telemetryTenantInvoices[0].kwh_reading : 1075.0;
 
   // Active Tenant Billing Ledger computed dynamically: combines live telemetry, Supabase db, and custom added invoices
+  // Uses canonical getMeterIdentityKey to guarantee each physical or logical meter only has ONE row in the ledger
   const tenantInvoices: TenantInvoiceDb[] = useMemo(() => {
     const invoiceMap = new Map<string, TenantInvoiceDb>();
 
     // 1. Seed with telemetry tenant points from live Niagara discovery
     for (const telInv of telemetryTenantInvoices) {
-      invoiceMap.set(telInv.invoice_number, telInv);
-      if (telInv.meter_name) invoiceMap.set(telInv.meter_name, telInv);
+      const key = getMeterIdentityKey(telInv.meter_name, telInv.tenant_name);
+      invoiceMap.set(key, telInv);
     }
 
     // 2. Merge Supabase dbInvoices if available
     for (const dbInv of dbInvoices) {
+      const key = getMeterIdentityKey(dbInv.meter_name, dbInv.tenant_name);
       const liveMatch = findLiveMeterPoint(points, dbInv.meter_name, dbInv.tenant_name);
       const kwh = liveMatch ? Number(liveMatch.current_value.toFixed(2)) : dbInv.kwh_reading;
-      const override = invoiceOverrides[dbInv.invoice_number] || invoiceOverrides[dbInv.meter_name] || {};
+      const override = invoiceOverrides[dbInv.invoice_number] || invoiceOverrides[dbInv.meter_name] || invoiceOverrides[key] || {};
       const demand = override.demand_charge !== undefined ? override.demand_charge : dbInv.demand_charge;
       const totalUsd = Number((kwh * ratePerKwh + demand).toFixed(2));
 
@@ -303,15 +318,15 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
         billing_period: override.billing_period || dbInv.billing_period || getCurrentPeriodLabel(),
         status: (override.status || dbInv.status) as 'PAID' | 'PENDING' | 'OVERDUE',
       };
-      invoiceMap.set(merged.invoice_number, merged);
-      if (merged.meter_name) invoiceMap.set(merged.meter_name, merged);
+      invoiceMap.set(key, merged);
     }
 
-    // 3. Merge custom user-added invoices (highest priority for user actions)
+    // 3. Merge custom user-added invoices (HIGHEST PRIORITY: updates/replaces automatic telemetry row)
     for (const custInv of customInvoices) {
+      const key = getMeterIdentityKey(custInv.meter_name, custInv.tenant_name);
       const liveMatch = findLiveMeterPoint(points, custInv.meter_name, custInv.tenant_name);
       const kwh = liveMatch ? Number(liveMatch.current_value.toFixed(2)) : custInv.kwh_reading;
-      const override = invoiceOverrides[custInv.invoice_number] || invoiceOverrides[custInv.meter_name] || {};
+      const override = invoiceOverrides[custInv.invoice_number] || invoiceOverrides[custInv.meter_name] || invoiceOverrides[key] || {};
       const demand = override.demand_charge !== undefined ? override.demand_charge : custInv.demand_charge;
       const totalUsd = Number((kwh * ratePerKwh + demand).toFixed(2));
 
@@ -330,25 +345,23 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
         billing_period: override.billing_period || custInv.billing_period || getCurrentPeriodLabel(),
         status: (override.status || custInv.status) as 'PAID' | 'PENDING' | 'OVERDUE',
       };
-      invoiceMap.set(merged.invoice_number, merged);
-      if (merged.meter_name) invoiceMap.set(merged.meter_name, merged);
+      invoiceMap.set(key, merged);
     }
 
-    // Deduplicate by unique invoice_number
-    const unique = Array.from(
-      new Map(Array.from(invoiceMap.values()).map((inv) => [inv.invoice_number, inv])).values()
-    );
-
-    return unique.sort((a, b) => a.invoice_number.localeCompare(b.invoice_number));
+    // Sort stably by invoice_number
+    return Array.from(invoiceMap.values()).sort((a, b) => a.invoice_number.localeCompare(b.invoice_number));
   }, [telemetryTenantInvoices, dbInvoices, customInvoices, points, ratePerKwh, invoiceOverrides, startDate, endDate]);
 
   // Handle adding an invoice successfully
   const handleAddInvoiceSuccess = (newInv?: TenantInvoiceDb) => {
     if (newInv) {
+      const newKey = getMeterIdentityKey(newInv.meter_name, newInv.tenant_name);
       setCustomInvoices((prev) => {
-        const filtered = prev.filter(
-          (i) => i.invoice_number !== newInv.invoice_number && i.meter_name !== newInv.meter_name
-        );
+        // Remove any prior entry matching the same meter identity or invoice_number
+        const filtered = prev.filter((i) => {
+          const iKey = getMeterIdentityKey(i.meter_name, i.tenant_name);
+          return iKey !== newKey && i.invoice_number !== newInv.invoice_number;
+        });
         const next = [newInv, ...filtered];
         saveCustomInvoicesToStorage(next);
         return next;
@@ -359,6 +372,7 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
           ...prev,
           [newInv.invoice_number]: newInv,
           [newInv.meter_name]: newInv,
+          [newKey]: newInv,
         };
         saveOverridesToStorage(next);
         return next;
@@ -455,18 +469,21 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
 
   // Delete a tenant invoice from DB and active state
   const handleDeleteInvoice = async (invoice: TenantInvoiceDb) => {
+    const delKey = getMeterIdentityKey(invoice.meter_name, invoice.tenant_name);
     setInvoiceOverrides((prev) => {
       const next = { ...prev };
       delete next[invoice.invoice_number];
       delete next[invoice.meter_name];
+      delete next[delKey];
       saveOverridesToStorage(next);
       return next;
     });
 
     setCustomInvoices((prev) => {
-      const next = prev.filter(
-        (i) => i.invoice_number !== invoice.invoice_number && i.meter_name !== invoice.meter_name
-      );
+      const next = prev.filter((i) => {
+        const iKey = getMeterIdentityKey(i.meter_name, i.tenant_name);
+        return iKey !== delKey && i.invoice_number !== invoice.invoice_number && i.meter_name !== invoice.meter_name;
+      });
       saveCustomInvoicesToStorage(next);
       return next;
     });
@@ -663,6 +680,7 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
         ratePerKwh={ratePerKwh}
         existingCount={tenantInvoices.length}
         points={points}
+        existingInvoices={tenantInvoices}
       />
 
       {/* Edit Tenant Billing Dates & Details Modal */}
