@@ -68,8 +68,11 @@ export interface TenantInvoiceDb {
   total_cost_usd: number;
   total_cost_khr: number;
   billing_period: string;
+  start_date?: string;
+  end_date?: string;
   status: 'PAID' | 'PENDING' | 'OVERDUE';
   due_date?: string;
   created_at?: string;
   updated_at?: string;
 }
+

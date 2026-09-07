@@ -4,3 +4,9 @@ export { TariffRateCalculator } from './TariffRateCalculator';
 export { BillingKpiGrid } from './BillingKpiGrid';
 export { ObixXmlInspector } from './ObixXmlInspector';
 export { TenantInvoicesTable } from './TenantInvoicesTable';
+export { AddTenantInvoiceModal } from './AddTenantInvoiceModal';
+export { EditTenantInvoiceModal } from './EditTenantInvoiceModal';
+export { TenantInvoiceSummaryModal } from './TenantInvoiceSummaryModal';
+
+
+

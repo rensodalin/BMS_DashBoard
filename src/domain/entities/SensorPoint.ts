@@ -78,6 +78,36 @@ export class SensorPoint {
     ].includes(this.state);
   }
 
+  public isBillingPoint(): boolean {
+    const devLower = this.deviceName.toLowerCase();
+    const nameLower = this.name.toLowerCase();
+    const tenantKeywords = [
+      "brown",
+      "koi",
+      "starbucks",
+      "bingo",
+      "bean",
+      "consumption",
+      "counter",
+      "multivibrator",
+    ];
+    return (
+      devLower.includes("billing") ||
+      devLower.includes("calculation") ||
+      nameLower.includes("billing") ||
+      nameLower.includes("consumption") ||
+      nameLower.includes("counter") ||
+      nameLower.includes("multivibrator") ||
+      nameLower.includes("kwh") ||
+      nameLower.includes("meter") ||
+      nameLower.includes("tenant") ||
+      nameLower.includes("tariff") ||
+      nameLower.includes("power") ||
+      nameLower.includes("energy") ||
+      tenantKeywords.some((t) => devLower.includes(t) || nameLower.includes(t))
+    );
+  }
+
   public static evaluatePoint(
     deviceName: string,
     ptName: string,
@@ -170,6 +200,8 @@ export class SensorPoint {
           nameLower.includes("meter") ||
           nameLower.includes("power") ||
           nameLower.includes("energy") ||
+          nameLower.includes("consumption") ||
+          nameLower.includes("counter") ||
           nameLower.includes("tenantintersys");
 
         // Energy accumulator points (e.g. TenantIntersys_kWh = 1030.0 kWh) accumulate consumption

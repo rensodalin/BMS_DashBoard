@@ -12,7 +12,7 @@ import { PointTrendModal } from './components/PointTrendModal';
 import { WeatherTrendModal } from './components/WeatherTrendModal';
 import { EquipmentHealthWorkspace } from './components/EquipmentHealthWorkspace';
 import { BillingWorkspace } from './components/billing';
-import { Search, LayoutGrid, ListFilter, Bell, ChevronLeft, ChevronRight, Zap, Thermometer, X } from 'lucide-react';
+import { Search, LayoutGrid, ListFilter, Bell, ChevronLeft, ChevronRight, Zap, Thermometer, X, Plus } from 'lucide-react';
 import { exportToCsv } from './lib/exportCsv';
 
 export type WorkspaceTab = 'SUMMARY' | 'SPACES' | 'EQUIPMENT' | 'DEVICES' | 'POINTS';
@@ -22,12 +22,23 @@ export function isBillingPoint(pt: SensorPoint): boolean {
   const dev = (pt.device_name || '').toLowerCase();
   const display = (pt.display_value || '').toLowerCase();
   return (
+    name.includes('consumption') ||
     name.includes('tenant') ||
     name.includes('billing') ||
     name.includes('kwh') ||
     name.includes('kw-hr') ||
     name.includes('meter') ||
     name.includes('energy_meter') ||
+    name.includes('apple') ||
+    name.includes('banana') ||
+    name.includes('orange') ||
+    name.includes('kiwi') ||
+    name.includes('strawberry') ||
+    name.includes('durain') ||
+    name.includes('cherry') ||
+    name.includes('peach') ||
+    name.includes('mango') ||
+    name.includes('melon') ||
     dev.includes('billing') ||
     dev.includes('tenant') ||
     dev.includes('meter') ||
@@ -50,6 +61,7 @@ export const App: React.FC = () => {
 
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [isBillingAddModalOpen, setIsBillingAddModalOpen] = useState<boolean>(false);
   const [selectedTrendPoint, setSelectedTrendPoint] = useState<SensorPoint | null>(null);
   const [isWeatherTrendOpen, setIsWeatherTrendOpen] = useState<boolean>(false);
 
@@ -68,29 +80,26 @@ export const App: React.FC = () => {
             if (oldName) {
               setPoints((prev) => prev.filter((p) => p.point_name !== oldName));
             }
-          } else if (payload.new && (payload.new as any).point_name) {
-            const updatedPt = payload.new as SensorPoint;
-            setPoints((prev) => {
-              const idx = prev.findIndex((p) => p.point_name === updatedPt.point_name);
-              if (idx !== -1) {
-                const updatedList = [...prev];
-                updatedList[idx] = { ...updatedList[idx], ...updatedPt };
-                return updatedList;
-              }
-              return [...prev, updatedPt];
-            });
+          } else {
+            loadPoints(false);
           }
         }
       )
       .subscribe();
 
+    // 1-second continuous live polling interval to ensure 100% realtime sync matching Niagara & Supabase
+    const liveInterval = setInterval(() => {
+      loadPoints(false);
+    }, 1000);
+
     return () => {
+      clearInterval(liveInterval);
       supabase.removeChannel(channel);
     };
   }, []);
 
-  const loadPoints = async (showLoading = false) => {
-    if (showLoading) setIsLoading(true);
+  const loadPoints = async (showLoadingSpinner = false) => {
+    if (showLoadingSpinner) setIsLoading(true);
     setIsRefreshing(true);
     const data = await fetchSensorPoints();
     setPoints(data);
@@ -148,12 +157,14 @@ export const App: React.FC = () => {
     exportToCsv(`BMS_Points_Report_${dateStr}.csv`, headers, rows);
   };
 
-  // Separate operational building points from billing energy meter points
+  // Separate operational building points from billing energy meter points in FIXED, STABLE order
   const dashboardPoints = useMemo(() => {
-    return points.filter((pt) => !isBillingPoint(pt));
+    return points
+      .filter((pt) => !isBillingPoint(pt))
+      .sort((a, b) => a.point_name.localeCompare(b.point_name));
   }, [points]);
 
-  // Filtered Points logic for dashboard table
+  // Filtered Points logic for dashboard table (stably ordered)
   const filteredPoints = useMemo(() => {
     return dashboardPoints.filter((pt) => {
       const search = searchQuery.toLowerCase().trim();
@@ -175,6 +186,7 @@ export const App: React.FC = () => {
       return true;
     });
   }, [dashboardPoints, searchQuery, activeFilter]);
+
 
   const activeAlarmsCount = useMemo(() => {
     return dashboardPoints.filter((pt) => formatPointReading(pt).isAlarm).length;
@@ -204,7 +216,14 @@ export const App: React.FC = () => {
         
         {/* Top Header & Breadcrumb Bar */}
         <Header
-          onOpenAddModal={() => setIsAddModalOpen(true)}
+          activeTab={activeTab}
+          onOpenAddModal={() => {
+            if (activeTab === 'billing') {
+              setIsBillingAddModalOpen(true);
+            } else {
+              setIsAddModalOpen(true);
+            }
+          }}
           onRefresh={() => loadPoints(true)}
           onExportAll={handleExportAll}
           isRefreshing={isRefreshing}
@@ -350,9 +369,9 @@ export const App: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Row 2: Status Count Strip + Search */}
+                  {/* Row 2: Status Count Strip + Search & Quick Add */}
                   {workspaceTab !== 'EQUIPMENT' && activeTab !== 'equipment' && (
-                    <div className="px-3.5 py-2 flex items-center justify-between gap-4">
+                    <div className="px-3.5 py-2 flex flex-wrap items-center justify-between gap-4">
                       
                       {/* Left Summary Metric Counters */}
                       <div className="flex items-center gap-6">
@@ -393,29 +412,45 @@ export const App: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Right Search Input */}
-                      <div className="hw-search-box">
-                        <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          placeholder="Search sensor points..."
-                          spellCheck={false}
-                        />
-                        {searchQuery ? (
-                          <button
-                            onClick={() => setSearchQuery('')}
-                            className="p-1 mr-1 text-slate-500 hover:text-white transition cursor-pointer"
-                            title="Clear search"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        ) : (
-                          <span className="text-[10px] font-mono text-slate-600 border border-[#2d3038] px-1 py-0.2 rounded mr-1.5 select-none pointer-events-none">
-                            /
-                          </span>
-                        )}
+                      {/* Right Search Input & Quick Add Point Button */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setIsAddModalOpen(true)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer"
+                          style={{
+                            backgroundColor: '#17252d',
+                            border: '1px solid #234354',
+                            color: '#00a4e4',
+                          }}
+                          title="Add new BMS sensor point / oBIX URL"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add Point</span>
+                        </button>
+
+                        <div className="hw-search-box">
+                          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search sensor points..."
+                            spellCheck={false}
+                          />
+                          {searchQuery ? (
+                            <button
+                              onClick={() => setSearchQuery('')}
+                              className="p-1 mr-1 text-slate-500 hover:text-white transition cursor-pointer"
+                              title="Clear search"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-mono text-slate-600 border border-[#2d3038] px-1 py-0.2 rounded mr-1.5 select-none pointer-events-none">
+                              /
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                     </div>
@@ -432,7 +467,11 @@ export const App: React.FC = () => {
                 <p className="text-xs text-slate-400 font-mono">Synchronizing Realtime Telemetry...</p>
               </div>
             ) : activeTab === 'billing' ? (
-              <BillingWorkspace points={points} />
+              <BillingWorkspace
+                points={points}
+                isAddInvoiceOpen={isBillingAddModalOpen}
+                onCloseAddInvoice={() => setIsBillingAddModalOpen(false)}
+              />
             ) : workspaceTab === 'EQUIPMENT' || activeTab === 'equipment' ? (
               <EquipmentHealthWorkspace points={points} />
             ) : viewMode === 'TABLE' ? (

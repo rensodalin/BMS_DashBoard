@@ -17,7 +17,8 @@ export async function fetchSensorPoints(): Promise<SensorPoint[]> {
   const { data, error } = await supabase
     .from('sensor_points')
     .select('*')
-    .order('updated_at', { ascending: false });
+    .order('point_name', { ascending: true });
+
 
   if (error) {
     console.error('Error fetching sensor_points:', error.message);
@@ -100,6 +101,118 @@ export async function fetchPointReadings(pointName: string, limit = 50): Promise
   }
   return (data || []).reverse();
 }
+
+export interface MeterReadingRangeResult {
+  startReading: number | null;
+  endReading: number | null;
+  deltaKwh: number | null;
+  startTimeActual?: string;
+  endTimeActual?: string;
+}
+
+// High-performance in-memory cache for meter interval ranges
+const rangeResultCache = new Map<string, { result: MeterReadingRangeResult; time: number }>();
+
+/**
+ * Fetch the exact recorded meter readings for a given start and end timestamp from point_readings
+ * Runs parallel indexed queries in ~300ms and caches responses for instant date-change calculations.
+ */
+export async function fetchMeterReadingRange(
+  pointName: string,
+  startIso: string,
+  endIso: string
+): Promise<MeterReadingRangeResult> {
+  try {
+    let cleanStart = (startIso || '').includes(' ')
+      ? startIso.replace(' ', 'T')
+      : (startIso || '');
+    if (cleanStart.length === 10) cleanStart += 'T00:00:00';
+    else if (cleanStart.length === 16) cleanStart += ':59';
+    else cleanStart = cleanStart.slice(0, 19);
+
+    let cleanEnd = (endIso || '').includes(' ')
+      ? endIso.replace(' ', 'T')
+      : (endIso || '');
+    if (cleanEnd.length === 10) cleanEnd += 'T23:59:59';
+    else if (cleanEnd.length === 16) cleanEnd += ':59';
+    else cleanEnd = cleanEnd.slice(0, 19);
+
+    const cacheKey = `${pointName}_${cleanStart}_${cleanEnd}`;
+    const cached = rangeResultCache.get(cacheKey);
+    // Return cached range if younger than 10 seconds
+    if (cached && Date.now() - cached.time < 10000) {
+      return cached.result;
+    }
+
+    // Execute start and end indexed queries in parallel (~300ms total)
+    const [startRes, endRes] = await Promise.all([
+      supabase
+        .from('point_readings')
+        .select('value, recorded_at')
+        .eq('point_name', pointName)
+        .lte('recorded_at', cleanStart)
+        .order('recorded_at', { ascending: false })
+        .limit(1),
+      supabase
+        .from('point_readings')
+        .select('value, recorded_at')
+        .eq('point_name', pointName)
+        .lte('recorded_at', cleanEnd)
+        .order('recorded_at', { ascending: false })
+        .limit(1),
+    ]);
+
+    let startRow = startRes.data?.[0];
+    let endRow = endRes.data?.[0];
+
+    // If no row exists before start, look for the first row right after start
+    if (!startRow) {
+      const { data: gteData } = await supabase
+        .from('point_readings')
+        .select('value, recorded_at')
+        .eq('point_name', pointName)
+        .gte('recorded_at', cleanStart)
+        .order('recorded_at', { ascending: true })
+        .limit(1);
+      startRow = gteData?.[0];
+    }
+
+    // If no row exists before end, look for latest available reading
+    if (!endRow) {
+      const { data: latestData } = await supabase
+        .from('point_readings')
+        .select('value, recorded_at')
+        .eq('point_name', pointName)
+        .order('recorded_at', { ascending: false })
+        .limit(1);
+      endRow = latestData?.[0];
+    }
+
+    const startVal = startRow ? Number(startRow.value) : null;
+    const endVal = endRow ? Number(endRow.value) : null;
+
+    let result: MeterReadingRangeResult;
+    if (startVal !== null && endVal !== null) {
+      const delta = Math.max(0, Number((endVal - startVal).toFixed(3)));
+      result = {
+        startReading: startVal,
+        endReading: endVal,
+        deltaKwh: delta,
+        startTimeActual: startRow?.recorded_at,
+        endTimeActual: endRow?.recorded_at,
+      };
+    } else {
+      result = { startReading: startVal, endReading: endVal, deltaKwh: null };
+    }
+
+    rangeResultCache.set(cacheKey, { result, time: Date.now() });
+    return result;
+  } catch (err) {
+    console.error('Error fetching meter reading range:', err);
+    return { startReading: null, endReading: null, deltaKwh: null };
+  }
+}
+
 
 // ==============================================================================
 // BILLING SYSTEM DATABASE HELPERS
@@ -194,3 +307,28 @@ export async function upsertTenantInvoice(invoice: Partial<TenantInvoiceDb>): Pr
   }
   return true;
 }
+
+/**
+ * Delete a tenant invoice from Supabase database
+ */
+export async function deleteTenantInvoice(
+  invoiceNumber: string,
+  meterName?: string
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('tenant_invoices')
+    .delete()
+    .eq('invoice_number', invoiceNumber);
+
+  if (meterName) {
+    await supabase.from('tenant_meters').delete().eq('meter_name', meterName);
+    await supabase.from('sensor_points').delete().eq('point_name', meterName);
+  }
+
+  if (error) {
+    console.warn(`Warning deleting tenant_invoice ${invoiceNumber}:`, error.message);
+    return false;
+  }
+  return true;
+}
+

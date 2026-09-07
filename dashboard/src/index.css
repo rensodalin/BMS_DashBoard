@@ -265,3 +265,49 @@
 .hw-pulse {
   animation: hw-pulse 2s ease-in-out infinite;
 }
+
+/* Date Input Calendar Indicator Styling */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.9;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* ============================================
+   PRINT STYLES FOR TENANT BILL SUMMARY
+   ============================================ */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  header,
+  nav,
+  aside,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-document {
+    position: static !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+
+
+

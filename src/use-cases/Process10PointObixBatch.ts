@@ -19,6 +19,8 @@ export class Process10PointObixBatch {
   private lastStates: Map<string, PointState> = new Map();
   // Live in-memory cache of current point states for 2-way chatbot replies
   private liveDataMap: Map<string, SensorPoint> = new Map();
+  // Flag to ensure startup is silent without firing alerts on cycle 1
+  private isInitialized: boolean = false;
 
   constructor(
     private obixGateway: IObixGateway,
@@ -51,11 +53,32 @@ export class Process10PointObixBatch {
         `📡 [${pt.deviceName}] -> [${pt.name}]: ${pt.displayValue} | State: [${pt.state}]`
       );
 
-      // Trigger Telegram Alert only when state transitions
-      if (pt.state !== previousState) {
+      // Silent Startup Check:
+      // On cycle 1, silently record initial baseline states into cache without alerting Telegram.
+      if (!this.isInitialized) {
+        this.lastStates.set(keyId, pt.state);
+        continue;
+      }
+
+      // Do NOT send Telegram alerts for Billing points (meters, kWh, tenants, etc.)
+      if (pt.isBillingPoint()) {
+        this.lastStates.set(keyId, pt.state);
+        continue;
+      }
+
+      // On subsequent cycles, trigger Telegram Alert ONLY when state actually transitions
+      if (previousState !== undefined && pt.state !== previousState) {
         await this.telegramGateway.sendPointStateAlert(pt);
         this.lastStates.set(keyId, pt.state);
+      } else if (previousState === undefined) {
+        // Newly discovered point during runtime: seed state
+        this.lastStates.set(keyId, pt.state);
       }
+    }
+
+    if (!this.isInitialized) {
+      this.isInitialized = true;
+      console.log(`[Startup] 🔇 Initialized ${points.length} points baseline silently. Active alert monitoring is now ON.`);
     }
 
     return points.length;

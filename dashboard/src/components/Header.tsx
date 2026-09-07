@@ -1,11 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, Plus, RefreshCw, Download, MapPin, Calendar, Info } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import {
+  Plus,
+  RefreshCw,
+  Download,
+  Calendar,
+  Info,
+} from 'lucide-react';
 
 interface HeaderProps {
   onOpenAddModal: () => void;
   onRefresh: () => void;
   onExportAll?: () => void;
   isRefreshing: boolean;
+  activeTab?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -13,160 +20,263 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   onExportAll,
   isRefreshing,
+  activeTab = 'dashboard',
 }) => {
-  const [currentDateStr, setCurrentDateStr] = useState<string>('');
-  const [liveTimeStr, setLiveTimeStr] = useState<string>('');
+  const [currentDateStr, setCurrentDateStr] = useState('');
+  const [liveTimeStr, setLiveTimeStr] = useState('');
 
   useEffect(() => {
     const updateClock = () => {
       const now = new Date();
-      setLiveTimeStr(now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-      const d = String(now.getDate()).padStart(2, '0');
-      const m = String(now.getMonth() + 1).padStart(2, '0');
-      const y = now.getFullYear();
-      setCurrentDateStr(`${d}-${m}-${y}`);
+
+      setLiveTimeStr(
+        now.toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+
+      setCurrentDateStr(`${day}-${month}-${year}`);
     };
+
     updateClock();
+
     const timer = setInterval(updateClock, 1000);
+
     return () => clearInterval(timer);
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 select-none" style={{ backgroundColor: '#121316' }}>
-      
-      {/* ── 1. Top Brand Navigation Bar ── */}
+    <header
+      className="sticky top-0 z-30 select-none"
+      style={{
+        backgroundColor: '#121316',
+        borderBottom: '1px solid #292b30',
+      }}
+    >
+      {/* Top bar */}
       <div
-        className="px-4 py-2.5 flex items-center justify-between"
-        style={{ borderBottom: '1px solid #23252b' }}
+        className="h-[60px] px-5 flex items-center justify-between"
+        style={{
+          borderBottom: '1px solid #25272c',
+        }}
       >
-        {/* Left: Hamburger & Honeywell Brand Title */}
-        <div className="flex items-center gap-3.5">
-          <button
-            className="p-1 rounded text-slate-400 hover:text-white transition cursor-pointer"
-            title="Toggle Menu"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+        {/* Brand */}
+        <div className="flex items-center">
+          <img
+            src="/intersys_logo.png"
+            alt="Intersys Solutions"
+            className="w-[100px] h-auto object-contain"
+            onError={(e) => {
+              e.currentTarget.src = '/intersys_logo.avif';
+            }}
+          />
 
-          <div className="flex items-center gap-2.5">
-            <span
-              className="font-bold tracking-tight text-white"
-              style={{ fontSize: '1.125rem', letterSpacing: '-0.02em' }}
-            >
-              Honeywell
-            </span>
-            <span className="text-slate-600 font-light text-sm">|</span>
-            <span
-              className="font-medium text-slate-300"
-              style={{ fontSize: '0.875rem', letterSpacing: '0.01em' }}
-            >
-              Remote Building Manager
-            </span>
-          </div>
+
+
+          <div
+            className="mx-4 h-5 w-px"
+            style={{
+              backgroundColor: '#35373c',
+            }}
+          />
+
+          <span
+            className="text-[13px]"
+            style={{
+              color: '#c8cacf',
+            }}
+          >
+            Remote Building Manager
+          </span>
         </div>
 
-        {/* Right: POWERED BY HONEYWELL FORGE + Avatar Profile */}
-        <div className="flex items-center gap-3.5">
-          <div
-            className="text-[11px] font-bold tracking-widest uppercase text-slate-300"
-            style={{ letterSpacing: '0.08em' }}
+        {/* Right side */}
+        <div className="flex items-center gap-4">
+          <span
+            className="hidden sm:block text-[10px]"
+            style={{
+              color: '#777a80',
+              letterSpacing: '0.08em',
+            }}
           >
             POWERED BY HONEYWELL FORGE
-          </div>
+          </span>
 
           <div
-            className="w-8 h-8 rounded-full overflow-hidden border border-slate-700 shadow-sm"
-            style={{ backgroundColor: '#202227' }}
+            className="h-5 w-px hidden sm:block"
+            style={{
+              backgroundColor: '#303238',
+            }}
+          />
+
+          <div
+            className="w-8 h-8 rounded-full overflow-hidden"
+            style={{
+              backgroundColor: '#202227',
+              border: '1px solid #35373d',
+            }}
           >
             <img
               src="/user_avatar.jpg"
               alt="Operations Manager"
               className="w-full h-full object-cover"
               onError={(e) => {
-                (e.target as HTMLElement).style.display = 'none';
+                e.currentTarget.style.display = 'none';
               }}
             />
           </div>
         </div>
       </div>
 
-      {/* ── 2. Breadcrumb & Date Selection Sub-bar ── */}
+      {/* Controls bar */}
       <div
-        className="px-4 py-2 flex flex-wrap items-center justify-between gap-3"
-        style={{ backgroundColor: '#17181c', borderBottom: '1px solid #26282f' }}
+        className="px-5 py-2.5 flex items-center justify-end gap-2.5"
+        style={{
+          backgroundColor: '#17181b',
+        }}
       >
-        {/* Left Breadcrumb Location */}
-        <div className="flex items-center gap-2 text-xs">
-          <div
-            className="w-6 h-6 rounded flex items-center justify-center"
-            style={{ backgroundColor: '#202227', border: '1px solid #2d3038' }}
+        {/* Date */}
+        <div className="flex items-center gap-2 mr-1">
+          <span
+            className="text-[11px]"
+            style={{
+              color: '#777a80',
+            }}
           >
-            <MapPin className="w-3.5 h-3.5 text-cyan-400" />
-          </div>
-          <span className="text-slate-400">Honeywell</span>
-          <span className="text-slate-600">›</span>
-          <span className="font-semibold text-white">ObixTest Station HQ</span>
-        </div>
+            Date from
+          </span>
 
-        {/* Right: Date picker & Action Controls */}
-        <div className="flex items-center gap-3">
-          
-          {/* Date from label and date picker box */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              Date from <Info className="w-3 h-3 text-slate-500" />
+          <Info
+            className="w-3 h-3"
+            style={{
+              color: '#55585e',
+            }}
+          />
+
+          <div
+            className="h-7 px-2.5 flex items-center gap-2 rounded"
+            style={{
+              backgroundColor: '#202227',
+              border: '1px solid #303239',
+            }}
+          >
+            <span
+              className="text-[11px] font-mono"
+              style={{
+                color: '#d3d5d8',
+              }}
+            >
+              {currentDateStr || 'Today'}
             </span>
-            <div
-              className="flex items-center gap-2 px-2.5 py-1 rounded text-xs font-mono"
-              style={{ backgroundColor: '#202227', border: '1px solid #2d3038', color: '#ffffff' }}
-            >
-              <span>{currentDateStr || 'Today'}</span>
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            </div>
+
+            <Calendar
+              className="w-3.5 h-3.5"
+              style={{
+                color: '#ffffff',
+              }}
+            />
           </div>
-
-          {/* Live Sync Clock Badge */}
-          <div
-            className="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono text-cyan-400"
-            style={{ backgroundColor: '#16181c', border: '1px solid #26282f' }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 hw-pulse" />
-            <span>{liveTimeStr || 'LIVE'}</span>
-          </div>
-
-          {/* Export Report CSV */}
-          {onExportAll && (
-            <button
-              onClick={onExportAll}
-              className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer text-emerald-400 hover:text-emerald-300"
-              style={{ backgroundColor: '#202227', border: '1px solid #2d3038' }}
-              title="Export report (.csv)"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export</span>
-            </button>
-          )}
-
-          {/* Refresh Telemetry */}
-          <button
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="p-1 rounded text-slate-400 hover:text-white transition cursor-pointer disabled:opacity-50"
-            style={{ backgroundColor: '#202227', border: '1px solid #2d3038' }}
-            title="Refresh live points"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
-          </button>
-
-          {/* Add Point */}
-          <button
-            onClick={onOpenAddModal}
-            className="flex items-center gap-1 px-3 py-1 rounded text-xs font-semibold text-white transition cursor-pointer"
-            style={{ backgroundColor: '#00a4e4' }}
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Point
-          </button>
         </div>
+
+        {/* Clock */}
+        <div
+          className="hidden sm:flex items-center h-7 px-2.5 rounded"
+          style={{
+            backgroundColor: '#1c1e21',
+            border: '1px solid #2c2f34',
+          }}
+        >
+          <span
+            className="text-[11px] font-mono"
+            style={{
+              color: '#aeb2b7',
+            }}
+          >
+            {liveTimeStr || '--:--:--'}
+          </span>
+        </div>
+
+        {/* Export */}
+        {onExportAll && (
+          <button
+            onClick={onExportAll}
+            className="h-7 px-2.5 flex items-center gap-1.5 rounded transition-colors cursor-pointer"
+            style={{
+              backgroundColor: '#202227',
+              border: '1px solid #303239',
+              color: '#9da1a7',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#d5d7da';
+              e.currentTarget.style.backgroundColor = '#25272c';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#9da1a7';
+              e.currentTarget.style.backgroundColor = '#202227';
+            }}
+            title="Export report"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="text-[11px]">Export</span>
+          </button>
+        )}
+
+        {/* Refresh */}
+        <button
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="w-7 h-7 flex items-center justify-center rounded transition-colors cursor-pointer disabled:opacity-50"
+          style={{
+            backgroundColor: '#202227',
+            border: '1px solid #303239',
+            color: '#8a8e95',
+          }}
+          onMouseEnter={(e) => {
+            if (!isRefreshing) {
+              e.currentTarget.style.color = '#d5d7da';
+              e.currentTarget.style.backgroundColor = '#25272c';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isRefreshing) {
+              e.currentTarget.style.color = '#8a8e95';
+              e.currentTarget.style.backgroundColor = '#202227';
+            }
+          }}
+          title="Refresh"
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-cyan-400' : ''
+              }`}
+          />
+        </button>
+
+        {/* Add Button (Point on Dashboard, Invoice on Billing) */}
+        <button
+          onClick={onOpenAddModal}
+          className="h-7 px-3 flex items-center gap-1.5 rounded font-medium transition-colors cursor-pointer"
+          style={{
+            backgroundColor: '#0098d1',
+            color: '#ffffff',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = '#00a4e4';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = '#0098d1';
+          }}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span className="text-[11px]">
+            {activeTab === 'billing' ? 'Add Invoice' : 'Add Point'}
+          </span>
+        </button>
       </div>
     </header>
   );

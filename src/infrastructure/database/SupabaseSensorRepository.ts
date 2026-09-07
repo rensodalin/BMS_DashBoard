@@ -16,20 +16,33 @@ export class SupabaseSensorRepository implements ISensorRepository {
     if (points.length === 0) return;
 
     // Build batch payloads for single HTTP request
-    const nowIso = new Date().toISOString();
+    // Helper to format exact local PC timestamp (YYYY-MM-DD HH:mm:ss)
+    const getLocalTimestamp = (): string => {
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      const YYYY = now.getFullYear();
+      const MM = pad(now.getMonth() + 1);
+      const DD = pad(now.getDate());
+      const HH = pad(now.getHours());
+      const mm = pad(now.getMinutes());
+      const ss = pad(now.getSeconds());
+      return `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss}`;
+    };
+
+    const nowLocal = getLocalTimestamp();
 
     const sensorPointsBatch = points.map((pt) => ({
       point_name: pt.name,
       current_value: pt.numericValue,
       alert_threshold: pt.highLimit,
       is_alarm: pt.isAlarm(),
-      updated_at: nowIso,
+      updated_at: nowLocal,
     }));
 
     const pointReadingsBatch = points.map((pt) => ({
       point_name: pt.name,
       value: pt.numericValue,
-      recorded_at: nowIso,
+      recorded_at: nowLocal,
     }));
 
     // 1. Single Batch Upsert into sensor_points table
@@ -59,3 +72,5 @@ export class SupabaseSensorRepository implements ISensorRepository {
     }
   }
 }
+
+

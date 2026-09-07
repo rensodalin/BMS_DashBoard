@@ -20,6 +20,21 @@ export class TelegramApiGateway implements ITelegramGateway {
   }
 
   /**
+   * Helper method to format current local PC timestamp (YYYY-MM-DD HH:mm:ss)
+   */
+  private getLocalTimestamp(): string {
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    const YYYY = now.getFullYear();
+    const MM = pad(now.getMonth() + 1);
+    const DD = pad(now.getDate());
+    const HH = pad(now.getHours());
+    const mm = pad(now.getMinutes());
+    const ss = pad(now.getSeconds());
+    return `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss}`;
+  }
+
+  /**
    * Escapes special HTML characters (<, >, &) to prevent Telegram API 400 Bad Request parsing errors
    */
   private escapeHtml(str: string): string {
@@ -81,6 +96,11 @@ export class TelegramApiGateway implements ITelegramGateway {
    * Edit headers, emojis, or descriptions in the switch-like branches below!
    */
   public async sendPointStateAlert(point: SensorPoint): Promise<boolean> {
+    // Suppress Telegram alerts for billing / energy meter points
+    if (point.isBillingPoint()) {
+      return false;
+    }
+
     const cleanPoint = this.escapeHtml(
       point.name.replace(/\$20/g, " ").replace(/%20/g, " ")
     );
@@ -187,7 +207,7 @@ export class TelegramApiGateway implements ITelegramGateway {
     const unit = SensorPoint.getPointUnit(cleanPoint, displayVal);
     const statusIcon = unit === "°C" ? "🌡" : "⚡";
 
-    const timeStr = new Date().toISOString().replace("T", " ").substring(0, 19);
+    const timeStr = this.getLocalTimestamp();
     const msg =
       `${header}\n\n` +
       `🏷 <b>Device:</b> ${deviceName}\n` +
@@ -475,7 +495,7 @@ export class TelegramApiGateway implements ITelegramGateway {
         : `✅ <b>Status:</b> All Points Normal`
     );
     lines.push(
-      `⏰ <b>Time:</b> ${new Date().toISOString().replace("T", " ").substring(0, 19)}`
+      `⏰ <b>Time:</b> ${this.getLocalTimestamp()}`
     );
 
     return this.sendTelegramMsg(lines.join("\n"));
