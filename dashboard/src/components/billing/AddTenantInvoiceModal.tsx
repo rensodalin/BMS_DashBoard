@@ -8,6 +8,7 @@ import {
   DollarSign,
   Plus,
   FileText,
+  Clock,
 } from 'lucide-react';
 import { upsertTenantInvoice } from '../../lib/supabase';
 import type { TenantInvoiceDb } from '../../types/bms';
@@ -22,6 +23,12 @@ const getMonthStartIso = (d: Date = new Date()): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01T00:00:00`;
 };
 
+const getMonthEndIso = (d: Date = new Date()): string => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(lastDay)}T23:59:59`;
+};
+
 const getCurrentPeriodLabel = (d: Date = new Date()): string => {
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 };
@@ -29,9 +36,10 @@ const getCurrentPeriodLabel = (d: Date = new Date()): string => {
 interface AddTenantInvoiceModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (newInvoice?: TenantInvoiceDb) => void;
   ratePerKwh: number;
   existingCount?: number;
+  points?: import('../../types/bms').SensorPoint[];
 }
 
 export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
@@ -40,6 +48,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
   onSuccess,
   ratePerKwh,
   existingCount = 0,
+  points = [],
 }) => {
   const [obixUrl, setObixUrl] = useState('');
   const [tenantName, setTenantName] = useState('');
@@ -70,7 +79,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Auto-parse Niagara oBIX Power Meter URL
+  // Auto-parse Niagara oBIX Power Meter URL with smart live telemetry matching
   const handleObixUrlChange = (url: string) => {
     setObixUrl(url);
     if (!url.trim()) return;
@@ -78,33 +87,53 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
     try {
       const cleanUrl = url.trim().replace(/\/+$/, '');
       const segments = cleanUrl.split('/');
-      const lastSegment = segments[segments.length - 1] || '';
+      const lastSegment = decodeURIComponent((segments[segments.length - 1] || '').replace(/\$20/g, ' '));
 
       if (lastSegment) {
-        const meterTag = lastSegment.toLowerCase().endsWith('_kwh')
-          ? lastSegment
-          : `${lastSegment}_kWh`;
-        setMeterName(meterTag);
-
-        // Derive tenant name
-        if (lastSegment.toLowerCase().includes('tenant')) {
-          const rawName = lastSegment.replace(/_kwh/i, '').replace(/^tenant_?/i, '');
-          const cleanName = rawName ? `Tenant ${rawName}` : 'Tenant Intersys';
-          setTenantName(cleanName);
+        // Derive clean tenant name
+        let cleanName = lastSegment;
+        if (cleanName.toLowerCase().includes('tenant')) {
+          const rawName = cleanName.replace(/_kwh/i, '').replace(/^tenant_?/i, '');
+          cleanName = rawName ? `Tenant ${rawName}` : 'Tenant Intersys';
         } else {
-          const cleanName = lastSegment.replace(/_kwh/i, '');
-          setTenantName(cleanName);
+          cleanName = cleanName.replace(/(_consumptions|_consumption|_kwh)/gi, '');
+        }
+        cleanName = cleanName.replace(/\$20/g, ' ').replace(/_/g, ' ').trim();
+        setTenantName(cleanName);
+
+        // Try to match against live telemetry points if available
+        let matchedPoint: import('../../types/bms').SensorPoint | undefined;
+        if (points && points.length > 0) {
+          const normTarget = cleanName.toLowerCase().replace(/[\s_\-$]+/g, '');
+          matchedPoint = points.find((p) => {
+            const pNorm = p.point_name.toLowerCase().replace(/[\s_\-$]+/g, '').replace(/(consumption|consumptions|kwh)/gi, '');
+            return pNorm === normTarget || p.point_name.toLowerCase().includes(normTarget);
+          });
+        }
+
+        if (matchedPoint) {
+          setMeterName(matchedPoint.point_name);
+          setKwhReading(matchedPoint.current_value.toFixed(1));
+        } else {
+          const meterTag = lastSegment.toLowerCase().endsWith('_kwh') || lastSegment.toLowerCase().endsWith('_consumption')
+            ? lastSegment
+            : `${lastSegment}_kWh`;
+          setMeterName(meterTag);
         }
 
         if (!unitZone) {
           setUnitZone('Commercial Suite 101');
         }
       }
-
     } catch {
       // ignore parse errors during typing
     }
   };
+
+  const parsedKwh = parseFloat(kwhReading) || 0;
+  const parsedDemand = parseFloat(demandCharge) || 0;
+  const totalUsd = Number((parsedKwh * ratePerKwh + parsedDemand).toFixed(2));
+  const totalKhr = Number((totalUsd * 4100).toFixed(2));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +145,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
     }
 
     if (!meterName.trim()) {
-      setErrorMsg('oBIX Meter Tag Name is required.');
+      setErrorMsg('Sub-Meter tag name is required.');
       return;
     }
 
@@ -135,11 +164,9 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
 
     setIsSubmitting(true);
 
-    const totalUsd = Number((kwh * ratePerKwh + demand).toFixed(2));
-    const totalKhr = Number((totalUsd * 4100).toFixed(2));
-
     const now = new Date();
     const newInvoice: TenantInvoiceDb = {
+      id: invoiceNumber.trim() || `INV-${now.getFullYear()}-${Date.now().toString().slice(-4)}`,
       invoice_number: invoiceNumber.trim() || `INV-${now.getFullYear()}-${Date.now().toString().slice(-4)}`,
       tenant_name: tenantName.trim(),
       unit_zone: unitZone.trim() || 'General Commercial Wing',
@@ -159,342 +186,352 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
 
     try {
       await upsertTenantInvoice(newInvoice);
-      setIsSubmitting(false);
-      onSuccess();
-      onClose();
     } catch (err) {
-      console.error('Failed to add tenant invoice:', err);
+      console.warn('Supabase upsert caught warning:', err);
+    } finally {
       setIsSubmitting(false);
-      onSuccess();
+      onSuccess(newInvoice);
       onClose();
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs select-none">
-      <div
-        className="w-full max-w-lg rounded p-5 relative max-h-[90vh] overflow-y-auto"
-        style={{
-          backgroundColor: '#202227',
-          border: '1px solid #2d3038',
-        }}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between pb-3 mb-4"
-          style={{ borderBottom: '1px solid #282a32' }}
-        >
-          <div className="flex items-center gap-2.5">
-            <div
-              className="p-1.5 rounded"
-              style={{
-                backgroundColor: 'rgba(0, 164, 228, 0.15)',
-                color: '#00a4e4',
-              }}
-            >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs select-none">
+      <div className="w-full max-w-xl bg-[#15161b] border border-[#202228] rounded-lg shadow-2xl shadow-black flex flex-col max-h-[92vh] overflow-hidden">
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#202228] bg-[#121317]">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded bg-[#00a4e4]/10 border border-[#00a4e4]/20 text-[#00a4e4]">
               <Zap className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white">
+              <h3 className="text-sm font-semibold tracking-wide text-white">
                 Add Sub-Meter / Tenant Invoice
               </h3>
-              <p className="text-[11px] text-slate-400">
-                Connect Niagara oBIX Power Meter to tenant utility ledger
+              <p className="text-[11px] text-[#8b929e]">
+                Connect Niagara oBIX meter telemetry to the tenant utility billing ledger
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded text-slate-400 hover:text-white transition cursor-pointer"
+            className="p-1.5 rounded text-[#8b929e] hover:text-white hover:bg-[#202228] transition cursor-pointer"
+            aria-label="Close modal"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {errorMsg && (
-          <div
-            className="p-2.5 mb-3 rounded text-xs flex items-center gap-2"
-            style={{
-              backgroundColor: 'rgba(229, 43, 32, 0.12)',
-              border: '1px solid rgba(229, 43, 32, 0.3)',
-              color: '#ef4444',
-            }}
-          >
-            <span>{errorMsg}</span>
-          </div>
-        )}
+        {/* Modal Scrollable Body */}
+        <div className="p-5 overflow-y-auto space-y-4">
+          {errorMsg && (
+            <div className="p-3 rounded text-xs flex items-center gap-2 bg-red-500/10 border border-red-500/25 text-red-400">
+              <span className="font-medium">{errorMsg}</span>
+            </div>
+          )}
 
-        <form onSubmit={handleSubmit} className="space-y-3 text-left">
-          {/* oBIX Power Meter URL Box */}
-          <div
-            className="p-3 rounded"
-            style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
-          >
-            <label className="block text-xs font-semibold text-cyan-400 mb-1 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Link className="w-3.5 h-3.5" /> Niagara oBIX Power Meter URL
-              </span>
-              <span className="text-[10px] text-slate-500 font-normal">Auto-extract</span>
-            </label>
-            <input
-              type="url"
-              value={obixUrl}
-              onChange={(e) => handleObixUrlChange(e.target.value)}
-              placeholder="e.g. https://localhost/obix/config/Drivers/ObixTest/PowerMeter/TenantIntersys_kWh/"
-              className="w-full hw-input text-xs font-mono text-cyan-300"
-            />
-          </div>
+          <form id="add-invoice-form" onSubmit={handleSubmit} className="space-y-4 text-left">
+            {/* Section 1: Niagara oBIX Integration */}
+            <div className="p-3 rounded bg-[#0e0f13] border border-[#202228]">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Link className="w-3.5 h-3.5 text-[#00a4e4]" />
+                  Niagara oBIX Power Meter URL
+                </label>
+                <span className="text-[10px] text-slate-500 font-mono">Optional Auto-Fill</span>
+              </div>
+              <input
+                type="url"
+                value={obixUrl}
+                onChange={(e) => handleObixUrlChange(e.target.value)}
+                placeholder="https://localhost/obix/config/Drivers/ObixTest/PowerMeter/TenantIntersys_kWh/"
+                className="w-full bg-[#15161b] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded px-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Paste an oBIX URL to automatically extract the meter tag name and tenant information.
+              </p>
+            </div>
 
-          {/* Tenant Name & Invoice # */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Tenant Name
-              </label>
-              <div className="relative">
-                <Building2 className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+            {/* Section 2: Tenant & Unit Info */}
+            <div className="space-y-3">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                Tenant & Identification
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Tenant Name <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <Building2 className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+                    <input
+                      type="text"
+                      value={tenantName}
+                      onChange={(e) => setTenantName(e.target.value)}
+                      placeholder="Tenant Intersys Co., Ltd."
+                      className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded pl-8 pr-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Invoice Number <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <FileText className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+                    <input
+                      type="text"
+                      value={invoiceNumber}
+                      onChange={(e) => setInvoiceNumber(e.target.value)}
+                      className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs font-mono rounded pl-8 pr-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Sub-Meter Tag Name <span className="text-red-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <Zap className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+                    <input
+                      type="text"
+                      value={meterName}
+                      onChange={(e) => setMeterName(e.target.value)}
+                      placeholder="TenantIntersys_kWh"
+                      className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded pl-8 pr-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Unit / Zone Location
+                  </label>
+                  <input
+                    type="text"
+                    value={unitZone}
+                    onChange={(e) => setUnitZone(e.target.value)}
+                    placeholder="Floor 3 - Suite 302"
+                    className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs rounded px-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Billing Cycle Dates */}
+            <div className="space-y-2.5 pt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Billing Period & Schedule
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">Date Range Presets:</span>
+              </div>
+
+              {/* Clean Unified Presets */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = new Date();
+                    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+                    setStartDate(formatIsoSecond(todayStart));
+                    setEndDate(formatIsoSecond(now));
+                  }}
+                  className="px-2.5 py-1 rounded text-[11px] font-mono bg-[#1a1c22] hover:bg-[#232630] text-slate-300 hover:text-white border border-[#282b35] transition cursor-pointer"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = new Date();
+                    setStartDate(getMonthStartIso(now));
+                    setEndDate(formatIsoSecond(now));
+                    setBillingPeriod(getCurrentPeriodLabel(now));
+                  }}
+                  className="px-2.5 py-1 rounded text-[11px] font-mono bg-[#1a1c22] hover:bg-[#232630] text-slate-300 hover:text-white border border-[#282b35] transition cursor-pointer"
+                >
+                  Month to Date
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = new Date();
+                    setStartDate(getMonthStartIso(now));
+                    setEndDate(getMonthEndIso(now));
+                    setBillingPeriod(getCurrentPeriodLabel(now));
+                  }}
+                  className="px-2.5 py-1 rounded text-[11px] font-mono bg-[#1a1c22] hover:bg-[#232630] text-slate-300 hover:text-white border border-[#282b35] transition cursor-pointer"
+                >
+                  Full Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const now = new Date();
+                    setEndDate(formatIsoSecond(now));
+                  }}
+                  className="px-2.5 py-1 rounded text-[11px] font-mono bg-[#1a1c22] hover:bg-[#232630] text-slate-300 hover:text-white border border-[#282b35] transition cursor-pointer"
+                >
+                  End = Now
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" /> Start Date & Time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    step="1"
+                    value={startDate.length === 10 ? `${startDate}T00:00:00` : startDate.replace(' ', 'T')}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-500" /> End Date & Time
+                  </label>
+                  <input
+                    type="datetime-local"
+                    step="1"
+                    value={endDate.length === 10 ? `${endDate}T23:59:59` : endDate.replace(' ', 'T')}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-slate-500" /> Billing Period Description
+                </label>
                 <input
                   type="text"
-                  value={tenantName}
-                  onChange={(e) => setTenantName(e.target.value)}
-                  placeholder="Tenant Intersys Co., Ltd."
-                  className="w-full hw-input pl-8 text-xs font-mono"
-                  required
+                  value={billingPeriod}
+                  onChange={(e) => setBillingPeriod(e.target.value)}
+                  placeholder={getCurrentPeriodLabel()}
+                  className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded px-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Invoice Number
-              </label>
-              <div className="relative">
-                <FileText className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
-                <input
-                  type="text"
-                  value={invoiceNumber}
-                  onChange={(e) => setInvoiceNumber(e.target.value)}
-                  className="w-full hw-input pl-8 text-xs font-mono text-white"
-                  required
-                />
+            {/* Section 4: Energy Reading & Tariff */}
+            <div className="space-y-2.5 pt-1">
+              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                Telemetry Reading & Cost Allocation
               </div>
-            </div>
-          </div>
 
-          {/* Sub-Meter Name & Unit/Zone */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Sub-Meter Tag Name
-              </label>
-              <div className="relative">
-                <Zap className="w-3.5 h-3.5 text-amber-500 absolute left-2.5 top-2.5" />
-                <input
-                  type="text"
-                  value={meterName}
-                  onChange={(e) => setMeterName(e.target.value)}
-                  placeholder="TenantIntersys_kWh"
-                  className="w-full hw-input pl-8 text-xs font-mono text-amber-300"
-                  required
-                />
-              </div>
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Energy (kWh)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={kwhReading}
+                    onChange={(e) => setKwhReading(e.target.value)}
+                    className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Unit / Zone Location
-              </label>
-              <input
-                type="text"
-                value={unitZone}
-                onChange={(e) => setUnitZone(e.target.value)}
-                placeholder="Floor 3 - Suite 302"
-                className="w-full hw-input text-xs font-mono"
-                required
-              />
-            </div>
-          </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Demand Fee ($)
+                  </label>
+                  <div className="relative">
+                    <DollarSign className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={demandCharge}
+                      onChange={(e) => setDemandCharge(e.target.value)}
+                      className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded pl-8 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                      required
+                    />
+                  </div>
+                </div>
 
-          {/* Start Date & Time and End Date & Time */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-white" /> Start Date & Time
-              </label>
-              <input
-                type="datetime-local"
-                step="1"
-                value={startDate.length === 10 ? `${startDate}T00:00:00` : startDate.replace(' ', 'T')}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full hw-input text-xs font-mono text-white"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-white" /> End Date & Time
-              </label>
-              <input
-                type="datetime-local"
-                step="1"
-                value={endDate.length === 10 ? `${endDate}T23:59:59` : endDate.replace(' ', 'T')}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full hw-input text-xs font-mono text-white"
-                required
-              />
-            </div>
-          </div>
-
-          {/* Quick Date Presets */}
-          <div className="flex flex-wrap items-center gap-1.5 -mt-1 mb-1">
-            <span className="text-[10px] text-slate-400 font-mono">Quick Date:</span>
-            <button
-              type="button"
-              onClick={() => {
-                const now = new Date();
-                const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-                setStartDate(formatIsoSecond(todayStart));
-                setEndDate(formatIsoSecond(now));
-              }}
-              className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-300 hover:bg-cyan-900 border border-cyan-800/50 cursor-pointer"
-            >
-              Today (00:00 to Now)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const now = new Date();
-                setStartDate(getMonthStartIso(now));
-                setEndDate(formatIsoSecond(now));
-              }}
-              className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#282a32] text-slate-300 hover:text-white border border-[#363a45] cursor-pointer"
-            >
-              Month to Now
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const now = new Date();
-                setEndDate(formatIsoSecond(now));
-              }}
-              className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-950/70 text-amber-300 hover:bg-amber-900 border border-amber-700/50 cursor-pointer"
-            >
-              End = Now
-            </button>
-          </div>
-
-          {/* Billing Period Label */}
-          <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
-              Billing Period Label (e.g. {getCurrentPeriodLabel()})
-            </label>
-            <input
-              type="text"
-              value={billingPeriod}
-              onChange={(e) => setBillingPeriod(e.target.value)}
-              placeholder={getCurrentPeriodLabel()}
-              className="w-full hw-input text-xs font-mono"
-            />
-          </div>
-
-          {/* kWh Reading & Demand Fee & Status */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Energy (kWh)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                value={kwhReading}
-                onChange={(e) => setKwhReading(e.target.value)}
-                className="w-full hw-input text-xs font-mono text-amber-300"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Demand Fee ($)
-              </label>
-              <div className="relative">
-                <DollarSign className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
-                <input
-                  type="number"
-                  step="0.01"
-                  value={demandCharge}
-                  onChange={(e) => setDemandCharge(e.target.value)}
-                  className="w-full hw-input pl-8 text-xs font-mono"
-                  required
-                />
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Payment Status
+                  </label>
+                  <select
+                    value={status}
+                    onChange={(e) =>
+                      setStatus(e.target.value as 'PAID' | 'PENDING' | 'OVERDUE')
+                    }
+                    className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                  >
+                    <option value="PAID">PAID</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="OVERDUE">OVERDUE</option>
+                  </select>
+                </div>
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Payment Status
-              </label>
-              <select
-                value={status}
-                onChange={(e) =>
-                  setStatus(e.target.value as 'PAID' | 'PENDING' | 'OVERDUE')
-                }
-                className="w-full hw-input text-xs font-mono bg-[#17181c] text-white"
-              >
-                <option value="PAID">PAID</option>
-                <option value="PENDING">PENDING</option>
-                <option value="OVERDUE">OVERDUE</option>
-              </select>
+            {/* Total Estimated Cost Summary Bar */}
+            <div className="p-3 rounded bg-[#0e0f13] border border-[#202228]">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <div className="text-slate-400">
+                  <span>Rate: </span>
+                  <span className="text-white font-semibold">${ratePerKwh.toFixed(3)}/kWh</span>
+                  <span className="mx-2 text-slate-600">•</span>
+                  <span className="text-slate-400">Total Calculation:</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-bold text-emerald-400">
+                    ${totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-[11px] text-slate-500 ml-2">
+                    (៛{totalKhr.toLocaleString('en-US')})
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
+          </form>
+        </div>
 
-          {/* Cost Preview Box */}
-          <div
-            className="p-3 rounded text-xs font-mono flex items-center justify-between"
-            style={{
-              backgroundColor: '#17181c',
-              border: '1px solid #282a32',
-            }}
+        {/* Modal Footer */}
+        <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-[#202228] bg-[#121317]">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-[#202228] transition cursor-pointer"
           >
-            <span className="text-slate-400">
-              Estimated Total (@ ${ratePerKwh.toFixed(3)}/kWh):
-            </span>
-            <span className="text-emerald-400 font-bold text-sm">
-              $
-              {(
-                (parseFloat(kwhReading) || 0) * ratePerKwh +
-                (parseFloat(demandCharge) || 0)
-              ).toFixed(2)}
-            </span>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#282a32] mt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-3 py-1 rounded text-xs font-medium text-slate-400 hover:text-white transition cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded text-xs font-semibold text-white transition cursor-pointer disabled:opacity-50"
-              style={{ backgroundColor: '#00a4e4' }}
-            >
-              {isSubmitting ? (
-                <span>Adding...</span>
-              ) : (
-                <>
-                  <Plus className="w-3.5 h-3.5" /> Add to Billing Ledger
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="add-invoice-form"
+            disabled={isSubmitting}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold text-white bg-[#00a4e4] hover:bg-[#0092cc] transition cursor-pointer disabled:opacity-50 shadow-sm"
+          >
+            {isSubmitting ? (
+              <span>Saving...</span>
+            ) : (
+              <>
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add to Billing Ledger</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
 };
+

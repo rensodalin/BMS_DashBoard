@@ -297,9 +297,12 @@ export async function updateUtilityRate(ratePerKwh: number): Promise<boolean> {
  * Upsert tenant invoice record in Supabase
  */
 export async function upsertTenantInvoice(invoice: Partial<TenantInvoiceDb>): Promise<boolean> {
+  // Strip non-schema columns (start_date, end_date) to prevent PGRST204 schema cache errors in Supabase
+  const { start_date, end_date, ...dbPayload } = invoice as any;
+
   const { error } = await supabase
     .from('tenant_invoices')
-    .upsert(invoice, { onConflict: 'invoice_number' });
+    .upsert(dbPayload, { onConflict: 'invoice_number' });
 
   if (error) {
     console.warn('Warning upserting tenant_invoice:', error.message);
