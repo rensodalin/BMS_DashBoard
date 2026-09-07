@@ -206,7 +206,7 @@ export const App: React.FC = () => {
   }, [dashboardPoints, selectedTrendPoint]);
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: '#17181c', color: '#ffffff' }}>
+    <div className="min-h-screen flex" style={{ backgroundColor: '#0d0e12', color: '#ffffff' }}>
       
       {/* ── Leftmost Vertical Navigation Rail ── */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />

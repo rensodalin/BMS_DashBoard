@@ -21,8 +21,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     <aside
       className="w-12 shrink-0 sticky top-0 h-screen flex flex-col items-center justify-between py-2.5 select-none z-40"
       style={{
-        backgroundColor: '#121316',
-        borderRight: '1px solid #23252b',
+        backgroundColor: '#0a0b0e',
+        borderRight: '1px solid #1a1c22',
       }}
     >
       {/* Navigation Rail Buttons */}
@@ -54,9 +54,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
               <span
                 className="absolute left-full ml-2 px-2 py-1 rounded text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 transition-opacity shadow-lg"
                 style={{
-                  backgroundColor: '#202227',
+                  backgroundColor: '#15161b',
                   color: '#ffffff',
-                  border: '1px solid #2d3038',
+                  border: '1px solid #202228',
                   fontSize: '11px',
                 }}
               >
@@ -70,7 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       {/* System Online Status Dot */}
       <div
         className="w-6 h-6 rounded flex items-center justify-center mb-1 shrink-0"
-        style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}
+        style={{ backgroundColor: '#101115', border: '1px solid #1c1d23' }}
         title="BMS Controller Online"
       >
         <span

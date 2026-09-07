@@ -55,15 +55,15 @@ export const Header: React.FC<HeaderProps> = ({
     <header
       className="sticky top-0 z-30 select-none"
       style={{
-        backgroundColor: '#121316',
-        borderBottom: '1px solid #292b30',
+        backgroundColor: '#0f1014',
+        borderBottom: '1px solid #1a1c22',
       }}
     >
       {/* Top bar */}
       <div
         className="h-[60px] px-5 flex items-center justify-between"
         style={{
-          borderBottom: '1px solid #25272c',
+          borderBottom: '1px solid #1a1c22',
         }}
       >
         {/* Brand */}
@@ -138,7 +138,8 @@ export const Header: React.FC<HeaderProps> = ({
       <div
         className="px-5 py-2.5 flex items-center justify-end gap-2.5"
         style={{
-          backgroundColor: '#17181b',
+          backgroundColor: '#131418',
+          borderBottom: '1px solid #1a1c22',
         }}
       >
         {/* Date */}
@@ -162,8 +163,8 @@ export const Header: React.FC<HeaderProps> = ({
           <div
             className="h-7 px-2.5 flex items-center gap-2 rounded"
             style={{
-              backgroundColor: '#202227',
-              border: '1px solid #303239',
+              backgroundColor: '#18191f',
+              border: '1px solid #252830',
             }}
           >
             <span
@@ -188,8 +189,8 @@ export const Header: React.FC<HeaderProps> = ({
         <div
           className="hidden sm:flex items-center h-7 px-2.5 rounded"
           style={{
-            backgroundColor: '#1c1e21',
-            border: '1px solid #2c2f34',
+            backgroundColor: '#18191f',
+            border: '1px solid #252830',
           }}
         >
           <span

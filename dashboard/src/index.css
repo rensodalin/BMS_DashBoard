@@ -3,14 +3,14 @@
 
 @layer base {
   :root {
-    --bms-bg-main: #17181c;
-    --bms-bg-header: #121316;
-    --bms-bg-sidebar: #121316;
-    --bms-bg-card: #202227;
-    --bms-bg-card-hover: #26282e;
-    --bms-bg-well: #16181c;
-    --bms-border: #2d3038;
-    --bms-border-light: #363943;
+    --bms-bg-main: #0d0e12;
+    --bms-bg-header: #0f1014;
+    --bms-bg-sidebar: #0a0b0e;
+    --bms-bg-card: #15161b;
+    --bms-bg-card-hover: #1b1d24;
+    --bms-bg-well: #101115;
+    --bms-border: #202228;
+    --bms-border-light: #2a2d36;
     --bms-cyan: #00a4e4;
     --bms-cyan-glow: rgba(0, 164, 228, 0.15);
     --bms-red: #e52b20;
@@ -18,12 +18,12 @@
     --bms-green: #48bb78;
     --bms-amber: #fa8c16;
     --bms-text-primary: #ffffff;
-    --bms-text-secondary: #9ca3af;
+    --bms-text-secondary: #94a3b8;
     --bms-text-muted: #64748b;
   }
 
   body {
-    background-color: #17181c;
+    background-color: #0d0e12;
     color: #ffffff;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     overflow-x: hidden;
@@ -39,14 +39,14 @@
 
 /* Surface Panels */
 .hw-panel {
-  background-color: #202227;
-  border: 1px solid #2d3038;
+  background-color: #15161b;
+  border: 1px solid #202228;
   border-radius: 4px;
 }
 
 .hw-panel-well {
-  background-color: #17181c;
-  border: 1px solid #282a32;
+  background-color: #101115;
+  border: 1px solid #1c1d23;
   border-radius: 4px;
 }
 
