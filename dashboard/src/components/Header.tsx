@@ -6,9 +6,9 @@ import {
   Calendar,
   Info,
   LogOut,
-  Shield,
   ChevronDown,
   Settings,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -134,92 +134,141 @@ export const Header: React.FC<HeaderProps> = ({
             }}
           />
 
-          {/* Interactive Admin Profile Button with Dropdown */}
+          {/* Interactive Profile Pill with Dropdown */}
           <div className="relative" ref={profileMenuRef}>
             <button
               onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-              className="flex items-center gap-2 p-1 pl-1.5 pr-2 rounded-full hover:bg-[#1a1c23] transition cursor-pointer border border-transparent hover:border-[#282b35]"
-              title="Profile & Settings"
+              className={`group flex items-center gap-2.5 py-1.5 px-2 rounded-lg transition-all duration-150 cursor-pointer border ${isProfileMenuOpen
+                ? 'bg-[#181a22] border-[#2e3240] shadow-sm'
+                : 'bg-[#121318]/90 hover:bg-[#181a22] border-[#1e2029] hover:border-[#2a2d39]'
+                }`}
+              title="Account & Settings"
             >
-              <div
-                className="w-7 h-7 rounded-full overflow-hidden flex items-center justify-center font-bold text-xs bg-[#00a4e4]/15 border border-[#00a4e4]/40 text-[#00a4e4]"
-              >
-                {user?.name
-                  ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
-                  : 'AD'}
+              {/* Avatar with subtle gradient and status indicator */}
+              <div className="relative shrink-0">
+                <div
+                  className={`w-7 h-7 rounded-md flex items-center justify-center font-semibold text-xs transition-shadow shadow-sm ${user?.role === 'admin'
+                    ? 'bg-gradient-to-br from-[#0080c8] to-[#00a4e4] text-white shadow-sky-950/40'
+                    : user?.role === 'tenant'
+                      ? 'bg-gradient-to-br from-purple-600 to-indigo-500 text-white shadow-purple-950/40'
+                      : 'bg-gradient-to-br from-slate-700 to-slate-600 text-slate-100'
+                    }`}
+                >
+                  {user?.name
+                    ? user.name
+                      .split(' ')
+                      .filter(Boolean)
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase()
+                    : 'AD'}
+                </div>
+                {/* Active indicator dot */}
+                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-[#0f1014]" />
               </div>
-              <div className="hidden md:flex flex-col text-left">
-                <span className="text-[11px] font-semibold text-slate-200 leading-tight truncate max-w-[110px]">
+
+              {/* User Name & Role Tag */}
+              <div className="hidden md:flex flex-col text-left leading-none">
+                <span className="text-[12px] font-medium text-slate-200 group-hover:text-white transition-colors truncate max-w-[125px]">
                   {user?.name || 'Administrator'}
                 </span>
-                <span className="text-[9px] text-[#00a4e4] font-mono leading-tight uppercase">
-                  {user?.role === 'admin' ? 'ADMIN' : user?.role || 'CLIENT'}
+                <span className="text-[10px] text-slate-500 mt-1 font-normal capitalize">
+                  {user?.role === 'admin' ? 'Administrator' : user?.role ? `${user.role} Account` : 'Client'}
                 </span>
               </div>
-              <ChevronDown className="w-3 h-3 text-slate-500" />
+
+              {/* Smooth rotating chevron */}
+              <ChevronDown
+                className={`w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180 text-slate-300' : ''
+                  }`}
+              />
             </button>
 
-            {/* Profile Dropdown Menu */}
+            {/* Profile Dropdown Popover */}
             {isProfileMenuOpen && (
-              <div className="absolute right-0 top-10 w-64 bg-[#15161b] border border-[#202228] rounded-lg shadow-2xl shadow-black p-3 z-50 text-left">
-                <div className="pb-2.5 mb-2 border-b border-[#202228]">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-[#00a4e4]/15 border border-[#00a4e4]/30 flex items-center justify-center text-[#00a4e4] font-bold text-xs shrink-0">
+              <div className="absolute right-0 top-11 w-72 bg-[#121319] border border-[#232632] rounded-xl shadow-2xl shadow-black/90 p-1.5 z-50 text-left animate-in fade-in zoom-in-95 duration-150">
+                {/* User Identity Section */}
+                <div className="p-3 bg-[#171922]/80 border border-[#202330] rounded-lg mb-1.5">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 shadow-md ${user?.role === 'admin'
+                        ? 'bg-gradient-to-br from-[#0080c8] to-[#00a4e4] text-white shadow-sky-950/50'
+                        : user?.role === 'tenant'
+                          ? 'bg-gradient-to-br from-purple-600 to-indigo-500 text-white shadow-purple-950/50'
+                          : 'bg-gradient-to-br from-slate-700 to-slate-600 text-white'
+                        }`}
+                    >
                       {user?.name
-                        ? user.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+                        ? user.name
+                          .split(' ')
+                          .filter(Boolean)
+                          .map((n) => n[0])
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase()
                         : 'AD'}
                     </div>
-                    <div className="overflow-hidden">
-                      <div className="text-xs font-semibold text-white truncate">
+
+                    <div className="overflow-hidden flex-1">
+                      <div className="text-xs font-semibold text-white truncate tracking-tight">
                         {user?.name || 'System Administrator'}
                       </div>
-                      <div className="text-[10px] text-slate-400 font-mono truncate">
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5">
                         {user?.email || 'admin@intersys.com'}
                       </div>
-                      {user?.assignedTenant && (
-                        <div className="text-[9px] text-[#00a4e4] font-mono truncate mt-0.5">
-                          Scope: {user.assignedTenant}
-                        </div>
-                      )}
                     </div>
                   </div>
-                  <div className="mt-2.5 flex items-center justify-between px-2 py-1 rounded bg-[#0d0e12] border border-[#202228] text-[10px] font-mono">
-                    <span className="text-slate-400 flex items-center gap-1">
-                      <Shield className="w-3 h-3 text-[#00a4e4]" /> Role:
-                    </span>
-                    <span className="text-emerald-400 font-bold flex items-center gap-1 uppercase">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      {user?.role === 'admin' ? 'SUPER ADMIN' : user?.role || 'CLIENT USER'}
-                    </span>
-                  </div>
+
+
+
+                  {user?.assignedTenant && (
+                    <div className="mt-1.5 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400 flex items-center gap-1.5 font-normal">
+                        <Building2 className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Facility</span>
+                      </span>
+                      <span className="text-slate-300 font-medium truncate max-w-[140px]">
+                        {user.assignedTenant}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Edit Admin Account Page Link (Admins Only) */}
-                {user?.role === 'admin' && onNavigateTab && (
+                {/* Actions & Links */}
+                <div className="space-y-0.5">
+                  {user?.role === 'admin' && onNavigateTab && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsProfileMenuOpen(false);
+                        onNavigateTab('settings');
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-[#1a1c24] transition-colors cursor-pointer group"
+                    >
+                      <Settings className="w-4 h-4 text-slate-400 group-hover:text-[#00a4e4] transition-colors" />
+                      <div className="flex flex-col text-left">
+                        <span className="leading-tight">Settings & Accounts</span>
+
+                      </div>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
                       setIsProfileMenuOpen(false);
-                      onNavigateTab('settings');
+                      logout();
                     }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-[#202228] transition cursor-pointer mb-1"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer group"
                   >
-                    <Settings className="w-3.5 h-3.5 text-[#00a4e4]" />
-                    <span>Admin Settings Page</span>
-                  </button>
-                )}
+                    <LogOut className="w-4 h-4 text-red-400/80 group-hover:text-red-300 transition-colors" />
+                    <div className="flex flex-col text-left">
+                      <span className="leading-tight">Sign Out</span>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsProfileMenuOpen(false);
-                    logout();
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-medium text-red-400 hover:text-white hover:bg-red-500/15 transition cursor-pointer"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Sign Out</span>
-                </button>
+                    </div>
+                  </button>
+                </div>
               </div>
             )}
           </div>

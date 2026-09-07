@@ -6,6 +6,8 @@ import { formatPointReading } from './PointsGrid';
 interface StatsOverviewProps {
   points: SensorPoint[];
   onOpenWeatherTrend?: () => void;
+  weather?: { temp: number; humidity: number; apparentTemp?: number };
+  onUpdateWeather?: (w: { temp: number; humidity: number; apparentTemp?: number }) => void;
 }
 
 export function isPumpRunning(pt: SensorPoint): boolean {
@@ -24,18 +26,11 @@ export function isPumpRunning(pt: SensorPoint): boolean {
     devLower.includes('ahu') ||
     devLower.includes('chiller');
 
-  if (!isPumpOrFan) return false;
-
-  return (
-    val === 1 ||
-    (val > 0 && !nameLower.includes('temp')) ||
-    pt.is_alarm ||
-    pt.state === 'BOOL_ON' ||
-    displayLower.includes('true') ||
-    displayLower.includes('run') ||
-    displayLower.includes('running') ||
-    displayLower.includes('on')
-  );
+  if (isPumpOrFan) {
+    if (displayLower.includes('run') || displayLower.includes('on') || displayLower.includes('true')) return true;
+    if (val === 1) return true;
+  }
+  return false;
 }
 
 export function isAcbEnergized(pt: SensorPoint): boolean {
@@ -44,55 +39,57 @@ export function isAcbEnergized(pt: SensorPoint): boolean {
   const displayLower = (pt.display_value || '').toLowerCase();
   const val = pt.current_value;
 
-  const isAcb =
+  const isAcbOrElec =
     nameLower.includes('acb') ||
     nameLower.includes('breaker') ||
-    nameLower.includes('mcb') ||
-    nameLower.includes('vcb') ||
-    nameLower.includes('electrical') ||
+    nameLower.includes('main') ||
+    nameLower.includes('incomer') ||
     devLower.includes('acb') ||
     devLower.includes('breaker') ||
-    devLower.includes('electrical');
+    devLower.includes('main') ||
+    devLower.includes('incomer');
 
-  if (!isAcb) return false;
-
-  return (
-    val === 1 ||
-    (val > 0 && !nameLower.includes('temp')) ||
-    pt.is_alarm ||
-    pt.state === 'BOOL_ON' ||
-    displayLower.includes('true') ||
-    displayLower.includes('energized') ||
-    displayLower.includes('on')
-  );
+  if (isAcbOrElec) {
+    if (displayLower.includes('energized') || displayLower.includes('closed') || displayLower.includes('on')) return true;
+    if (val === 1) return true;
+  }
+  return false;
 }
 
 export function isEquipmentRunning(pt: SensorPoint): boolean {
   return isPumpRunning(pt) || isAcbEnergized(pt);
 }
 
-export const StatsOverview: React.FC<StatsOverviewProps> = ({ points, onOpenWeatherTrend }) => {
+export const StatsOverview: React.FC<StatsOverviewProps> = ({ 
+  points, 
+  onOpenWeatherTrend,
+  weather: propWeather,
+  onUpdateWeather,
+}) => {
   const totalPoints = points.length;
 
-  // Live Weather State for Phnom Penh (AccuWeather Location 49785)
-  const [weather, setWeather] = useState<{ temp: number; humidity: number }>({
-    temp: 30.3,
-    humidity: 66,
-  });
+  const [localWeather, setLocalWeather] = useState<{ temp: number; humidity: number; apparentTemp?: number }>(
+    propWeather || { temp: 32.3, humidity: 62, apparentTemp: 37.1 }
+  );
+
+  const weather = propWeather || localWeather;
 
   useEffect(() => {
     const fetchWeather = async () => {
       try {
         const res = await fetch(
-          'https://api.open-meteo.com/v1/forecast?latitude=11.5564&longitude=104.9282&current=temperature_2m,relative_humidity_2m'
+          'https://api.open-meteo.com/v1/forecast?latitude=11.5564&longitude=104.9282&current=temperature_2m,relative_humidity_2m,apparent_temperature'
         );
         if (res.ok) {
           const data = await res.json();
           if (data.current) {
-            setWeather({
+            const w = {
               temp: data.current.temperature_2m,
               humidity: data.current.relative_humidity_2m,
-            });
+              apparentTemp: data.current.apparent_temperature,
+            };
+            setLocalWeather(w);
+            onUpdateWeather?.(w);
           }
         }
       } catch (err) {
@@ -101,9 +98,9 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({ points, onOpenWeat
     };
 
     fetchWeather();
-    const timer = setInterval(fetchWeather, 300000);
+    const timer = setInterval(fetchWeather, 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [onUpdateWeather]);
 
   const runningPumps = points.filter(isPumpRunning).length;
   const energizedElectrical = points.filter(isAcbEnergized).length;

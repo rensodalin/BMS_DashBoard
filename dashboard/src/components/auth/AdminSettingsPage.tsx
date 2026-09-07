@@ -1,19 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Shield,
   Eye,
   EyeOff,
   Check,
   AlertCircle,
   LogOut,
-  Camera,
   Copy,
   RotateCcw,
-  Building,
   UserPlus,
   Users,
   Trash2,
   CheckCheck,
+  Sliders,
 } from 'lucide-react';
 import { useAuth, type ClientAccount } from '../../context/AuthContext';
 
@@ -29,10 +27,9 @@ export const AdminSettingsPage: React.FC = () => {
     deleteClientAccount,
   } = useAuth();
 
-  // Tab state: 'account' | 'clients'
   const [activeTab, setActiveTab] = useState<'account' | 'clients'>('account');
 
-  // Admin Profile form states
+  // Form states - Admin Profile
   const [firstName, setFirstName] = useState('System');
   const [lastName, setLastName] = useState('Administrator');
   const [email, setEmail] = useState('admin@intersys.com');
@@ -54,20 +51,11 @@ export const AdminSettingsPage: React.FC = () => {
   const [isCreatingClient, setIsCreatingClient] = useState(false);
   const [copiedClientId, setCopiedClientId] = useState<string | null>(null);
 
-  // Cover image preset
-  const [coverPreset, setCoverPreset] = useState<number>(0);
-  const coverGradients = [
-    'linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #00a4e4 100%)',
-    'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0284c7 100%)',
-    'linear-gradient(135deg, #1e1b4b 0%, #3730a3 50%, #06b6d4 100%)',
-  ];
-
   // Feedback states
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [warningMsg, setWarningMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [hasCopied, setHasCopied] = useState(false);
   const [hasCustomCreds, setHasCustomCreds] = useState(false);
 
   useEffect(() => {
@@ -228,151 +216,103 @@ export const AdminSettingsPage: React.FC = () => {
     }
   };
 
-  const handleCopyLink = () => {
-    const textToCopy = `https://192.168.1.140/bms/admin (${email})`;
-    navigator.clipboard.writeText(textToCopy);
-    setHasCopied(true);
-    setTimeout(() => setHasCopied(false), 2500);
-  };
-
-  const cycleCover = () => {
-    setCoverPreset((prev) => (prev + 1) % coverGradients.length);
-  };
-
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim() || 'System Administrator';
   const initials = firstName ? `${firstName[0]}${lastName ? lastName[0] : ''}`.toUpperCase() : 'AD';
 
   return (
-    <div className="flex-1 w-full animate-fadeIn text-left select-none">
+    <div className="flex-1 w-full text-left select-none font-sans pb-10">
       {/* =========================================================
-          HERO COVER BANNER
+          ENTERPRISE PAGE HEADER (Honeywell Forge Style)
       ========================================================== */}
-      <div
-        className="w-full h-48 md:h-56 rounded-2xl relative overflow-hidden transition-all duration-700 shadow-xl"
-        style={{
-          background: coverGradients[coverPreset],
-        }}
-      >
-        {/* Subtle geometric polygon overlay */}
-        <div
-          className="absolute inset-0 opacity-25 pointer-events-none mix-blend-overlay"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 80% 20%, rgba(255,255,255,0.4) 0%, transparent 50%), linear-gradient(60deg, transparent 40%, rgba(255,255,255,0.15) 45%, transparent 60%)',
-          }}
-        />
 
-        {/* Top bar controls on cover */}
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={cycleCover}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/35 hover:bg-black/55 backdrop-blur-md border border-white/20 text-white text-xs font-medium transition cursor-pointer shadow-md"
-            title="Change cover background gradient"
-          >
-            <Camera className="w-3.5 h-3.5" />
-            <span>Change Cover</span>
-          </button>
-        </div>
-
-        {/* Honeywell & Intersys Badge in Cover */}
-        <div className="absolute bottom-5 left-6 md:left-8 hidden md:flex items-center gap-2 text-white/80 font-mono text-[11px]">
-          <Shield className="w-4 h-4 text-white" />
-          <span className="font-semibold tracking-wider">HONEYWELL FORGE • SECURE GATEWAY</span>
-        </div>
-      </div>
 
       {/* =========================================================
-          MAIN 2-COLUMN PROFILE & SETTINGS CONTAINER (Overlapping Cover)
+          MAIN 2-COLUMN LAYOUT
       ========================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 px-3 sm:px-6 -mt-16 md:-mt-20 relative z-10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 px-6 mt-6">
 
-        {/* ── LEFT PROFILE CARD ── */}
+        {/* ── LEFT PROFILE & CLEARANCE CARD ── */}
         <div className="lg:col-span-4 xl:col-span-3">
-          <div className="bg-[#15161b] border border-[#202228] rounded-2xl p-6 shadow-2xl flex flex-col items-center text-center">
-            {/* Avatar with Camera badge */}
-            <div className="relative mb-3.5">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-[#00a4e4]/20 via-[#0e1626] to-[#00a4e4]/10 border-2 border-[#00a4e4]/50 p-1 flex items-center justify-center shadow-lg shadow-[#00a4e4]/10">
-                <div className="w-full h-full rounded-full bg-[#10131a] flex items-center justify-center text-2xl font-bold text-[#00a4e4]">
-                  {initials}
-                </div>
+          <div className="bg-[#15161b] border border-[#202228] rounded-xl p-5 shadow-lg flex flex-col items-center text-center">
+            {/* Avatar */}
+            <div className="w-20 h-20 rounded-xl bg-gradient-to-br from-[#0080c8] to-[#00a4e4] p-0.5 shadow-lg shadow-sky-950/40 flex items-center justify-center mb-3.5">
+              <div className="w-full h-full rounded-[10px] bg-[#11131a] flex items-center justify-center text-2xl font-bold text-white">
+                {initials}
               </div>
-              <button
-                type="button"
-                onClick={cycleCover}
-                className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-[#00a4e4] hover:bg-[#0092cc] text-white flex items-center justify-center border-2 border-[#15161b] shadow-md transition cursor-pointer"
-                title="Change Appearance"
-              >
-                <Camera className="w-3.5 h-3.5" />
-              </button>
             </div>
 
-            {/* Name & Organization */}
+            {/* Name & Role */}
             <h2 className="text-base font-bold text-white tracking-tight">{fullName}</h2>
+            <p className="text-xs text-slate-400 mt-0.5 font-normal truncate max-w-full">
+              {email}
+            </p>
 
 
-            {/* Status stats list */}
+            {/* Status & Scope metadata */}
             <div className="w-full mt-6 pt-4 border-t border-[#202228] space-y-3 text-xs">
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Assigned Role</span>
-                <span className="font-semibold text-amber-400 font-mono">Super Admin</span>
+                <span className="text-slate-400 font-normal">Department</span>
+                <span className="font-medium text-slate-200 truncate max-w-[130px]">{department}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Security Clearance</span>
-                <span className="font-semibold text-emerald-400 font-mono">Level 5 (Root)</span>
+                <span className="text-slate-400 font-normal">Security Level</span>
+                <span className="font-medium text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span>Level 5 (Full Control)</span>
+                </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Provisioned Clients</span>
-                <span className="font-semibold text-[#00a4e4] font-mono">{clientAccounts.length} Accounts</span>
+                <span className="text-slate-400 font-normal">Client Accounts</span>
+                <span className="font-medium text-[#00a4e4]">
+                  {clientAccounts.length} Registered
+                </span>
               </div>
             </div>
 
             {/* Action Button: Sign Out */}
-            <div className="w-full mt-6 space-y-2">
+            <div className="w-full mt-6 pt-3 border-t border-[#202228]">
               <button
                 type="button"
                 onClick={() => logout()}
                 className="w-full py-2 px-3 rounded-lg text-xs font-medium text-red-400 hover:text-white bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition cursor-pointer flex items-center justify-center gap-2"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span>Sign Out of BMS</span>
+                <span>Sign Out of Gateway</span>
               </button>
-
-              {/* Copyable Profile / Gateway URL Bar */}
-
             </div>
           </div>
         </div>
 
-        {/* ── RIGHT MAIN SETTINGS CARD ── */}
+        {/* ── RIGHT MAIN SETTINGS & MANAGEMENT CARD ── */}
         <div className="lg:col-span-8 xl:col-span-9">
-          <div className="bg-[#15161b] border border-[#202228] rounded-2xl shadow-2xl p-6 sm:p-7">
+          <div className="bg-[#15161b] border border-[#202228] rounded-xl shadow-lg p-6">
 
-            {/* Top Tab Strip (matching reference UI) */}
-            <div className="flex items-center gap-6 sm:gap-8 border-b border-[#202228] pb-3 mb-6 overflow-x-auto">
+            {/* Tab Strip */}
+            <div className="flex items-center gap-6 border-b border-[#202228] pb-3 mb-6 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setActiveTab('account')}
-                className={`text-xs font-semibold pb-3 -mb-3 transition-colors cursor-pointer relative whitespace-nowrap ${activeTab === 'account'
+                className={`text-xs font-semibold pb-3 -mb-3 transition-colors cursor-pointer relative whitespace-nowrap flex items-center gap-2 ${activeTab === 'account'
                   ? 'text-white border-b-2 border-[#00a4e4]'
                   : 'text-slate-400 hover:text-slate-200'
                   }`}
               >
-                Account Settings
+                <Sliders className="w-3.5 h-3.5" />
+                <span>Administrator Credentials</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab('clients')}
-                className={`text-xs font-semibold pb-3 -mb-3 transition-colors cursor-pointer relative whitespace-nowrap flex items-center gap-1.5 ${activeTab === 'clients'
+                className={`text-xs font-semibold pb-3 -mb-3 transition-colors cursor-pointer relative whitespace-nowrap flex items-center gap-2 ${activeTab === 'clients'
                   ? 'text-white border-b-2 border-[#00a4e4]'
                   : 'text-slate-400 hover:text-slate-200'
                   }`}
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>Add Client Account</span>
+                <span>Client & Tenant Directory</span>
                 {clientAccounts.length > 0 && (
-                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-[#00a4e4]/15 text-[#00a4e4] border border-[#00a4e4]/30">
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-medium bg-[#00a4e4]/15 text-[#00a4e4] border border-[#00a4e4]/30">
                     {clientAccounts.length}
                   </span>
                 )}
@@ -392,7 +332,7 @@ export const AdminSettingsPage: React.FC = () => {
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-400" />
                 <div className="space-y-1">
                   <div className="font-semibold text-amber-400 flex items-center gap-1.5">
-                    <span>Supabase Cloud Sync Notice</span>
+                    <span>Database Sync Notice</span>
                   </div>
                   <div>{warningMsg}</div>
                 </div>
@@ -423,7 +363,7 @@ export const AdminSettingsPage: React.FC = () => {
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
                         placeholder="First name"
-                        className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                        className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                         required
                       />
                     </div>
@@ -437,7 +377,7 @@ export const AdminSettingsPage: React.FC = () => {
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
                         placeholder="Last name"
-                        className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                        className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                         required
                       />
                     </div>
@@ -454,26 +394,26 @@ export const AdminSettingsPage: React.FC = () => {
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
                         placeholder="+855 12 345 678"
-                        className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                        className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        Email address
+                        Administrator Email Address
                       </label>
                       <input
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="admin@intersys.com"
-                        className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                        className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                         required
                       />
                     </div>
                   </div>
 
-                  {/* Row 3: Department / Facility & Username */}
+                  {/* Row 3: Department & Username */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1.5">
@@ -483,27 +423,27 @@ export const AdminSettingsPage: React.FC = () => {
                         type="text"
                         value={department}
                         onChange={(e) => setDepartment(e.target.value)}
-                        placeholder="Facility Operations"
-                        className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                        placeholder="BMS Operations"
+                        className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                       />
                     </div>
 
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        Admin Login Username
+                        Login Username
                       </label>
                       <input
                         type="text"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
                         placeholder="admin"
-                        className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                        className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                       />
                     </div>
                   </div>
 
                   {/* Row 4: Password Update */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1.5">
                         New Password <span className="text-slate-500 font-normal">(leave blank to keep current)</span>
@@ -514,7 +454,7 @@ export const AdminSettingsPage: React.FC = () => {
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           placeholder="••••••••"
-                          className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-3.5 pr-10 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                          className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-3.5 pr-10 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                         />
                         <button
                           type="button"
@@ -536,21 +476,21 @@ export const AdminSettingsPage: React.FC = () => {
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                        className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Bottom Update Button */}
-                <div className="pt-4 flex items-center justify-between border-t border-[#202228]">
+                {/* Bottom Action Row */}
+                <div className="pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-[#202228]">
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="px-6 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#2563eb] hover:bg-[#1d4ed8] active:bg-[#1e40af] transition cursor-pointer disabled:opacity-50 shadow-md shadow-blue-600/20 flex items-center gap-2"
+                    className="px-6 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#00a4e4] hover:bg-[#0092cc] active:bg-[#0081b5] transition cursor-pointer disabled:opacity-50 shadow-md shadow-[#00a4e4]/15 flex items-center justify-center gap-2"
                   >
                     <Check className="w-4 h-4" />
-                    <span>{isSaving ? 'Updating...' : 'Update Admin Account'}</span>
+                    <span>{isSaving ? 'Updating...' : 'Save Administrator Settings'}</span>
                   </button>
 
                   <div className="flex items-center gap-3">
@@ -558,37 +498,30 @@ export const AdminSettingsPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleResetDefaults}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-mono text-slate-400 hover:text-white bg-[#202228] hover:bg-[#2a2d36] transition cursor-pointer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white bg-[#1a1c24] hover:bg-[#252833] border border-[#232632] transition cursor-pointer"
                         title="Revert back to .env values"
                       >
                         <RotateCcw className="w-3.5 h-3.5 text-[#00a4e4]" />
-                        <span>Reset to .env</span>
+                        <span>Revert to .env Defaults</span>
                       </button>
                     )}
-                    <span className="text-[11px] font-mono text-slate-500">
-                      Changes sync immediately to local session
-                    </span>
                   </div>
                 </div>
               </form>
             )}
 
             {/* =========================================================
-                TAB 2: ADD CLIENT ACCOUNT & CLIENT DIRECTORY
+                TAB 2: ADD CLIENT ACCOUNT & DIRECTORY
             ========================================================== */}
             {activeTab === 'clients' && (
               <div className="space-y-7">
                 {/* 1. Add Client Form */}
                 <div className="bg-[#0e0f13] border border-[#202228] rounded-xl p-5">
                   <div className="flex items-center gap-2.5 pb-3 mb-4 border-b border-[#202228]">
-                    <div className="w-8 h-8 rounded-lg bg-[#00a4e4]/15 border border-[#00a4e4]/30 flex items-center justify-center text-[#00a4e4]">
-                      <UserPlus className="w-4 h-4" />
-                    </div>
+
                     <div>
                       <h3 className="text-sm font-semibold text-white">Create New Client Account</h3>
-                      <p className="text-[11px] text-slate-400 font-mono">
-                        Assign name, login email, password, and access scope
-                      </p>
+
                     </div>
                   </div>
 
@@ -604,7 +537,7 @@ export const AdminSettingsPage: React.FC = () => {
                           value={clientName}
                           onChange={(e) => setClientName(e.target.value)}
                           placeholder="e.g. KOI Facility Manager"
-                          className="w-full bg-[#15161b] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                          className="w-full bg-[#15161b] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                           required
                         />
                       </div>
@@ -619,7 +552,7 @@ export const AdminSettingsPage: React.FC = () => {
                           value={clientEmail}
                           onChange={(e) => setClientEmail(e.target.value)}
                           placeholder="e.g. client@koi.com"
-                          className="w-full bg-[#15161b] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                          className="w-full bg-[#15161b] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                           required
                         />
                       </div>
@@ -627,14 +560,14 @@ export const AdminSettingsPage: React.FC = () => {
                       {/* Username */}
                       <div>
                         <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                          Login Username <span className="text-slate-500 font-normal">(optional prefix)</span>
+                          Login Username <span className="text-slate-500 font-normal">(optional)</span>
                         </label>
                         <input
                           type="text"
                           value={clientUsername}
                           onChange={(e) => setClientUsername(e.target.value)}
                           placeholder="e.g. koi_client"
-                          className="w-full bg-[#15161b] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                          className="w-full bg-[#15161b] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                         />
                       </div>
 
@@ -649,7 +582,7 @@ export const AdminSettingsPage: React.FC = () => {
                             value={clientPassword}
                             onChange={(e) => setClientPassword(e.target.value)}
                             placeholder="Enter login password"
-                            className="w-full bg-[#15161b] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-3.5 pr-10 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                            className="w-full bg-[#15161b] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-3.5 pr-10 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                             required
                           />
                           <button
@@ -671,9 +604,9 @@ export const AdminSettingsPage: React.FC = () => {
                         <select
                           value={clientRole}
                           onChange={(e) => setClientRole(e.target.value as any)}
-                          className="w-full bg-[#15161b] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors cursor-pointer"
+                          className="w-full bg-[#15161b] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors cursor-pointer font-sans"
                         >
-                          <option value="client">Client (Dashboard & Telemetry)</option>
+                          <option value="client">Client (Full Dashboard Access)</option>
                           <option value="tenant">Tenant (Utility Billing & Meters)</option>
                           <option value="viewer">Viewer (Read-Only Telemetry)</option>
                         </select>
@@ -682,14 +615,14 @@ export const AdminSettingsPage: React.FC = () => {
                       {/* Access Scope / Tenant */}
                       <div>
                         <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                          Assigned Scope / Tenant
+                          Assigned Facility Scope
                         </label>
                         <input
                           type="text"
                           value={clientTenant}
                           onChange={(e) => setClientTenant(e.target.value)}
-                          placeholder="e.g. KOI Facility, Amazon, or All Tenants"
-                          className="w-full bg-[#15161b] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 font-mono transition-colors"
+                          placeholder="e.g. KOI Facility, or All Tenants"
+                          className="w-full bg-[#15161b] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                         />
                       </div>
                     </div>
@@ -701,7 +634,7 @@ export const AdminSettingsPage: React.FC = () => {
                         className="px-5 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#00a4e4] hover:bg-[#0092cc] active:bg-[#0081b5] transition cursor-pointer disabled:opacity-50 shadow-md shadow-[#00a4e4]/15 flex items-center gap-2"
                       >
                         <UserPlus className="w-4 h-4" />
-                        <span>{isCreatingClient ? 'Provisioning Account...' : 'Provision Client Account'}</span>
+                        <span>{isCreatingClient ? 'Provisioning...' : 'Provision Client Account'}</span>
                       </button>
                     </div>
                   </form>
@@ -713,11 +646,11 @@ export const AdminSettingsPage: React.FC = () => {
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-[#00a4e4]" />
                       <h3 className="text-xs font-semibold text-white">
-                        Authorized Client Accounts ({clientAccounts.length})
+                        Authorized Accounts ({clientAccounts.length})
                       </h3>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-500">
-                      Only listed accounts have login authorization
+                    <span className="text-[11px] text-slate-400">
+                      Credentials authenticate at login page
                     </span>
                   </div>
 
@@ -725,7 +658,7 @@ export const AdminSettingsPage: React.FC = () => {
                     <div className="p-8 rounded-xl bg-[#0e0f13] border border-[#202228] text-center space-y-2">
                       <Users className="w-8 h-8 text-slate-600 mx-auto" />
                       <p className="text-xs font-medium text-slate-300">No client accounts created yet</p>
-                      <p className="text-[11px] text-slate-500 font-mono max-w-sm mx-auto">
+                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
                         Use the form above to provision a client account with their login email and password.
                       </p>
                     </div>
@@ -733,13 +666,13 @@ export const AdminSettingsPage: React.FC = () => {
                     <div className="overflow-x-auto rounded-xl border border-[#202228] bg-[#0e0f13]">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
-                          <tr className="border-b border-[#202228] text-[10px] font-mono uppercase text-slate-400 bg-[#12141a]">
-                            <th className="py-2.5 px-3">Client / Name</th>
-                            <th className="py-2.5 px-3">Login Username / ID</th>
-                            <th className="py-2.5 px-3">Role</th>
-                            <th className="py-2.5 px-3">Assigned Scope</th>
-                            <th className="py-2.5 px-3">Status</th>
-                            <th className="py-2.5 px-3 text-right">Actions</th>
+                          <tr className="border-b border-[#202228] text-[11px] font-semibold uppercase tracking-wider text-slate-400 bg-[#12141a]">
+                            <th className="py-2.5 px-3.5">Client Identity</th>
+                            <th className="py-2.5 px-3.5">Login ID</th>
+                            <th className="py-2.5 px-3.5">Role</th>
+                            <th className="py-2.5 px-3.5">Assigned Facility</th>
+                            <th className="py-2.5 px-3.5">Status</th>
+                            <th className="py-2.5 px-3.5 text-right">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#202228]">
@@ -747,17 +680,17 @@ export const AdminSettingsPage: React.FC = () => {
                             const isCopied = copiedClientId === client.id;
                             return (
                               <tr key={client.id} className="hover:bg-[#15161b] transition-colors">
-                                <td className="py-3 px-3">
+                                <td className="py-3 px-3.5">
                                   <div className="font-semibold text-white">{client.name}</div>
-                                  <div className="text-[11px] text-slate-400 font-mono">{client.email}</div>
+                                  <div className="text-[11px] text-slate-400">{client.email}</div>
                                 </td>
 
-                                <td className="py-3 px-3 font-mono text-slate-300">
+                                <td className="py-3 px-3.5 text-slate-300 font-medium">
                                   {client.username || client.email.split('@')[0]}
                                 </td>
 
-                                <td className="py-3 px-3">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase border ${client.role === 'tenant'
+                                <td className="py-3 px-3.5">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase border ${client.role === 'tenant'
                                     ? 'bg-purple-500/10 border-purple-500/25 text-purple-400'
                                     : client.role === 'viewer'
                                       ? 'bg-slate-500/10 border-slate-500/25 text-slate-400'
@@ -767,15 +700,15 @@ export const AdminSettingsPage: React.FC = () => {
                                   </span>
                                 </td>
 
-                                <td className="py-3 px-3 text-slate-300 font-mono text-[11px]">
+                                <td className="py-3 px-3.5 text-slate-300 text-xs">
                                   {client.assignedTenant || 'All Tenants'}
                                 </td>
 
-                                <td className="py-3 px-3">
+                                <td className="py-3 px-3.5">
                                   <button
                                     type="button"
                                     onClick={() => handleToggleClientStatus(client)}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold border transition cursor-pointer flex items-center gap-1.5 ${client.status === 'ACTIVE'
+                                    className={`px-2 py-0.5 rounded text-[10px] font-medium border transition cursor-pointer flex items-center gap-1.5 ${client.status === 'ACTIVE'
                                       ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20'
                                       : 'bg-red-500/10 border-red-500/25 text-red-400 hover:bg-red-500/20'
                                       }`}
@@ -786,13 +719,13 @@ export const AdminSettingsPage: React.FC = () => {
                                   </button>
                                 </td>
 
-                                <td className="py-3 px-3 text-right">
+                                <td className="py-3 px-3.5 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
                                     <button
                                       type="button"
                                       onClick={() => handleCopyClientCredentials(client)}
-                                      className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono text-slate-300 hover:text-white bg-[#1a1c23] hover:bg-[#252833] border border-[#202228] transition cursor-pointer"
-                                      title="Copy login credentials to share with client"
+                                      className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-medium text-slate-300 hover:text-white bg-[#1a1c23] hover:bg-[#252833] border border-[#202228] transition cursor-pointer"
+                                      title="Copy login credentials to clipboard"
                                     >
                                       {isCopied ? <CheckCheck className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-[#00a4e4]" />}
                                       <span>{isCopied ? 'Copied' : 'Credentials'}</span>

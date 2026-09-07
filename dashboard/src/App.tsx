@@ -67,6 +67,11 @@ const DashboardContent: React.FC = () => {
   const [isBillingAddModalOpen, setIsBillingAddModalOpen] = useState<boolean>(false);
   const [selectedTrendPoint, setSelectedTrendPoint] = useState<SensorPoint | null>(null);
   const [isWeatherTrendOpen, setIsWeatherTrendOpen] = useState<boolean>(false);
+  const [liveWeather, setLiveWeather] = useState<{ temp: number; humidity: number; apparentTemp?: number }>({
+    temp: 32.3,
+    humidity: 62,
+    apparentTemp: 37.1,
+  });
 
   // Load initial data & set up Supabase Realtime Subscription
   useEffect(() => {
@@ -251,6 +256,8 @@ const DashboardContent: React.FC = () => {
                   <StatsOverview
                     points={dashboardPoints}
                     onOpenWeatherTrend={() => setIsWeatherTrendOpen(true)}
+                    weather={liveWeather}
+                    onUpdateWeather={setLiveWeather}
                   />
                 )}
 
@@ -515,6 +522,8 @@ const DashboardContent: React.FC = () => {
       <WeatherTrendModal
         isOpen={isWeatherTrendOpen}
         onClose={() => setIsWeatherTrendOpen(false)}
+        currentWeather={liveWeather}
+        onUpdateWeather={setLiveWeather}
       />
 
     </div>

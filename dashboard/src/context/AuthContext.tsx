@@ -57,7 +57,7 @@ const CLIENT_ACCOUNTS_KEY = 'bms_client_accounts';
 
 // Environment-configured Administrator credentials
 const ENV_ADMIN_EMAIL = (import.meta.env.VITE_ADMIN_EMAIL || 'admin@intersys.com').trim().toLowerCase();
-const ENV_ADMIN_PASSWORD = (import.meta.env.VITE_ADMIN_PASSWORD || 'admin12345').trim();
+const ENV_ADMIN_PASSWORD = (import.meta.env.VITE_ADMIN_PASSWORD || 'admin12345.intersys').trim();
 const ENV_ADMIN_USER = ENV_ADMIN_EMAIL.split('@')[0];
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
     id TEXT PRIMARY KEY DEFAULT 'admin_primary',
     name TEXT NOT NULL DEFAULT 'System Administrator',
     email TEXT NOT NULL DEFAULT 'admin@intersys.com',
-    password TEXT NOT NULL DEFAULT 'admin12345',
+    password TEXT NOT NULL DEFAULT 'admin12345.intersys',
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -50,5 +50,5 @@ CREATE POLICY "Allow all on admin_settings" ON admin_settings FOR ALL USING (tru
 
 -- Seed Default Master Admin row if not already present
 INSERT INTO admin_settings (id, name, email, password)
-VALUES ('admin_primary', 'System Administrator', 'admin@intersys.com', 'admin12345')
-ON CONFLICT (id) DO NOTHING;
+VALUES ('admin_primary', 'System Administrator', 'admin@intersys.com', 'admin12345.intersys')
+ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password;

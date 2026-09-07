@@ -6,6 +6,8 @@ import { exportToCsv } from '../lib/exportCsv';
 interface WeatherTrendModalProps {
   isOpen: boolean;
   onClose: () => void;
+  currentWeather?: { temp: number; humidity: number; apparentTemp?: number };
+  onUpdateWeather?: (w: { temp: number; humidity: number; apparentTemp?: number }) => void;
 }
 
 interface HourlyData {
@@ -14,12 +16,27 @@ interface HourlyData {
   humidity: number;
 }
 
-export const WeatherTrendModal: React.FC<WeatherTrendModalProps> = ({ isOpen, onClose }) => {
+export const WeatherTrendModal: React.FC<WeatherTrendModalProps> = ({
+  isOpen,
+  onClose,
+  currentWeather,
+  onUpdateWeather,
+}) => {
   const [hourlyData, setHourlyData] = useState<HourlyData[]>([]);
-  const [currentTemp, setCurrentTemp] = useState<number>(30.3);
-  const [currentHumidity, setCurrentHumidity] = useState<number>(66);
+  const [currentTemp, setCurrentTemp] = useState<number>(currentWeather?.temp ?? 32.3);
+  const [currentHumidity, setCurrentHumidity] = useState<number>(currentWeather?.humidity ?? 62);
+  const [apparentTemp, setApparentTemp] = useState<number | undefined>(currentWeather?.apparentTemp ?? 37.1);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  // Sync state whenever currentWeather changes
+  useEffect(() => {
+    if (currentWeather) {
+      setCurrentTemp(currentWeather.temp);
+      setCurrentHumidity(currentWeather.humidity);
+      if (currentWeather.apparentTemp) setApparentTemp(currentWeather.apparentTemp);
+    }
+  }, [currentWeather]);
 
   useEffect(() => {
     if (isOpen) {
@@ -40,15 +57,20 @@ export const WeatherTrendModal: React.FC<WeatherTrendModalProps> = ({ isOpen, on
 
     try {
       const res = await fetch(
-        'https://api.open-meteo.com/v1/forecast?latitude=11.5564&longitude=104.9282&current=temperature_2m,relative_humidity_2m&hourly=temperature_2m,relative_humidity_2m&forecast_days=1'
+        'https://api.open-meteo.com/v1/forecast?latitude=11.5564&longitude=104.9282&current=temperature_2m,relative_humidity_2m,apparent_temperature&hourly=temperature_2m,relative_humidity_2m&forecast_days=1'
       );
 
       if (res.ok) {
         const data = await res.json();
         
         if (data.current) {
-          setCurrentTemp(data.current.temperature_2m);
-          setCurrentHumidity(data.current.relative_humidity_2m);
+          const newTemp = data.current.temperature_2m;
+          const newHum = data.current.relative_humidity_2m;
+          const newApparent = data.current.apparent_temperature;
+          setCurrentTemp(newTemp);
+          setCurrentHumidity(newHum);
+          setApparentTemp(newApparent);
+          onUpdateWeather?.({ temp: newTemp, humidity: newHum, apparentTemp: newApparent });
         }
 
         if (data.hourly && data.hourly.time) {
@@ -156,8 +178,15 @@ export const WeatherTrendModal: React.FC<WeatherTrendModalProps> = ({ isOpen, on
               <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-0.5 flex items-center gap-1">
                 <Thermometer className="w-3 h-3 text-amber-500" /> Outdoor Temperature
               </div>
-              <div className="text-xl font-bold font-mono text-amber-500">
-                {currentTemp.toFixed(1)} °C
+              <div className="flex items-baseline gap-2">
+                <span className="text-xl font-bold font-mono text-amber-500">
+                  {currentTemp.toFixed(1)} °C
+                </span>
+                {apparentTemp !== undefined && (
+                  <span className="text-[11px] text-slate-400">
+                    (Feels {apparentTemp.toFixed(1)}°C)
+                  </span>
+                )}
               </div>
             </div>
             <div className="text-right text-[10px] text-slate-500 font-mono">
