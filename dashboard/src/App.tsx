@@ -14,6 +14,9 @@ import { EquipmentHealthWorkspace } from './components/EquipmentHealthWorkspace'
 import { BillingWorkspace } from './components/billing';
 import { Search, LayoutGrid, ListFilter, Bell, ChevronLeft, ChevronRight, Zap, Thermometer, X, Plus } from 'lucide-react';
 import { exportToCsv } from './lib/exportCsv';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { LoginPage } from './components/auth/LoginPage';
+import { AdminSettingsPage } from './components/auth/AdminSettingsPage';
 
 export type WorkspaceTab = 'SUMMARY' | 'SPACES' | 'EQUIPMENT' | 'DEVICES' | 'POINTS';
 
@@ -47,7 +50,7 @@ export function isBillingPoint(pt: SensorPoint): boolean {
   );
 }
 
-export const App: React.FC = () => {
+const DashboardContent: React.FC = () => {
   const [points, setPoints] = useState<SensorPoint[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -217,6 +220,7 @@ export const App: React.FC = () => {
         {/* Top Header & Breadcrumb Bar */}
         <Header
           activeTab={activeTab}
+          onNavigateTab={(tab) => setActiveTab(tab)}
           onOpenAddModal={() => {
             if (activeTab === 'billing') {
               setIsBillingAddModalOpen(true);
@@ -232,15 +236,15 @@ export const App: React.FC = () => {
         {/* Main Body Grid */}
         <main className="p-4 flex flex-col lg:flex-row gap-3 max-w-[1680px] w-full mx-auto">
           
-          {/* Left Column: Building Photo, Healthy Score, Alarm Metrics (Hidden in Equipment Health & Billing views) */}
-          {activeTab !== 'equipment' && workspaceTab !== 'EQUIPMENT' && activeTab !== 'billing' && (
+          {/* Left Column: Building Photo, Healthy Score, Alarm Metrics (Hidden in Equipment Health, Billing, and Settings views) */}
+          {activeTab !== 'equipment' && workspaceTab !== 'EQUIPMENT' && activeTab !== 'billing' && activeTab !== 'settings' && (
             <LeftBuildingPanel points={dashboardPoints} />
           )}
 
           {/* Right Main Content Workspace */}
           <div className="flex-1 min-w-0 flex flex-col">
             
-            {activeTab !== 'billing' && (
+            {activeTab !== 'billing' && activeTab !== 'settings' && (
               <>
                 {/* Top Metrics Row: Displayed on main dashboard, hidden on Equipment Health */}
                 {activeTab !== 'equipment' && workspaceTab !== 'EQUIPMENT' && (
@@ -460,12 +464,14 @@ export const App: React.FC = () => {
               </>
             )}
 
-            {/* Workspace Body: Points Table / Grid / Equipment Health / Billing */}
+            {/* Workspace Body: Points Table / Grid / Equipment Health / Billing / Settings */}
             {isLoading ? (
               <div className="hw-panel p-16 text-center">
                 <div className="w-7 h-7 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                 <p className="text-xs text-slate-400 font-mono">Synchronizing Realtime Telemetry...</p>
               </div>
+            ) : activeTab === 'settings' ? (
+              <AdminSettingsPage />
             ) : activeTab === 'billing' ? (
               <BillingWorkspace
                 points={points}
@@ -512,6 +518,33 @@ export const App: React.FC = () => {
       />
 
     </div>
+  );
+};
+
+const AppMain: React.FC = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#0a0b0e] text-slate-400 font-mono select-none">
+        <div className="w-8 h-8 border-2 border-[#00a4e4] border-t-transparent rounded-full animate-spin mb-3" />
+        <p className="text-xs tracking-wider uppercase text-slate-300">Initializing BMS Security Console...</p>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return <DashboardContent />;
+};
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppMain />
+    </AuthProvider>
   );
 };
 

@@ -254,18 +254,21 @@ export async function fetchTenantMeters(): Promise<TenantMeter[]> {
  * Fetch active utility rate tariff settings from Supabase
  */
 export async function fetchUtilityRates(): Promise<UtilityRate | null> {
-  const { data, error } = await supabase
-    .from('utility_rates')
-    .select('*')
-    .eq('is_active', true)
-    .limit(1)
-    .single();
+  try {
+    const { data, error } = await supabase
+      .from('utility_rates')
+      .select('*')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
 
-  if (error) {
-    console.warn('Info: utility_rates table query notice:', error.message);
+    if (error) {
+      return null;
+    }
+    return data;
+  } catch {
     return null;
   }
-  return data;
 }
 
 /**
@@ -334,4 +337,135 @@ export async function deleteTenantInvoice(
   }
   return true;
 }
+
+/**
+ * Fetch Admin settings and credentials from Supabase
+ */
+export async function fetchAdminSettingsDb(): Promise<{ name: string; email: string; password?: string } | null> {
+  try {
+    const { data, error } = await supabase
+      .from('admin_settings')
+      .select('*')
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return {
+      name: data.name,
+      email: data.email,
+      password: data.password,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save or update Admin settings in Supabase
+ */
+export async function saveAdminSettingsDb(settings: { name: string; email: string; password?: string }): Promise<{ success: boolean; error?: string }> {
+  try {
+    const payload: any = {
+      id: 'admin_primary',
+      name: settings.name,
+      email: settings.email,
+      updated_at: new Date().toISOString(),
+    };
+    if (settings.password) {
+      payload.password = settings.password;
+    }
+
+    const { error } = await supabase.from('admin_settings').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.warn('Notice saving admin_settings to Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to save admin settings to Supabase' };
+  }
+}
+
+/**
+ * Fetch all registered Client accounts from Supabase
+ */
+export async function fetchClientAccountsDb(): Promise<any[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from('client_accounts')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return null;
+    return data.map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      email: d.email,
+      username: d.username || d.email.split('@')[0],
+      password: d.password,
+      role: d.role,
+      assignedTenant: d.assigned_tenant,
+      status: d.status,
+      createdAt: d.created_at,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save or update a Client account in Supabase
+ */
+export async function saveClientAccountDb(account: {
+  id: string;
+  name: string;
+  email: string;
+  username: string;
+  password: string;
+  role: string;
+  assignedTenant?: string;
+  status: string;
+  createdAt?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const payload = {
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      username: account.username,
+      password: account.password,
+      role: account.role,
+      assigned_tenant: account.assignedTenant,
+      status: account.status,
+      created_at: account.createdAt || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('client_accounts').upsert(payload, { onConflict: 'id' });
+    if (error) {
+      console.warn('Notice saving client_account to Supabase:', error.message);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Failed to save client account to Supabase' };
+  }
+}
+
+/**
+ * Delete a Client account from Supabase
+ */
+export async function deleteClientAccountDb(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('client_accounts').delete().eq('id', id);
+    if (error) {
+      console.warn('Notice deleting client_account from Supabase:', error.message);
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 

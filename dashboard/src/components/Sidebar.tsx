@@ -1,5 +1,6 @@
 import React from 'react';
-import { Home, Bell, LayoutGrid, Activity, Leaf, CreditCard, Settings } from 'lucide-react';
+import { Home, Bell, LayoutGrid, Activity, Leaf, CreditCard, Settings, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -7,15 +8,19 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
-  const navItems = [
+  const { logout, isAdmin } = useAuth();
+
+  const allNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'alarms', label: 'Alarms', icon: Bell },
     { id: 'points', label: 'Spaces & Points', icon: LayoutGrid },
     { id: 'equipment', label: 'Equipment Health', icon: Activity },
     { id: 'energy', label: 'Energy & Carbon', icon: Leaf },
     { id: 'billing', label: 'Billing & Metering', icon: CreditCard },
-    { id: 'settings', label: 'Settings', icon: Settings },
+    { id: 'settings', label: 'Settings', icon: Settings, adminOnly: true },
   ];
+
+  const navItems = allNavItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     <aside
@@ -67,16 +72,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
         })}
       </div>
 
-      {/* System Online Status Dot */}
-      <div
-        className="w-6 h-6 rounded flex items-center justify-center mb-1 shrink-0"
-        style={{ backgroundColor: '#101115', border: '1px solid #1c1d23' }}
-        title="BMS Controller Online"
-      >
-        <span
-          className="w-2 h-2 rounded-full hw-pulse"
-          style={{ backgroundColor: '#48bb78' }}
-        />
+      {/* Bottom section: Online Status & Sign Out */}
+      <div className="flex flex-col items-center gap-2 mb-1">
+        <button
+          onClick={() => logout()}
+          className="w-8 h-8 rounded flex items-center justify-center text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer relative group"
+          title="Sign Out"
+        >
+          <LogOut className="w-4 h-4" />
+          <span
+            className="absolute left-full ml-2 px-2 py-1 rounded text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 transition-opacity shadow-lg"
+            style={{
+              backgroundColor: '#15161b',
+              color: '#ef4444',
+              border: '1px solid #202228',
+              fontSize: '11px',
+            }}
+          >
+            Sign Out
+          </span>
+        </button>
+
+        {/* System Online Status Dot */}
+        <div
+          className="w-6 h-6 rounded flex items-center justify-center shrink-0"
+          style={{ backgroundColor: '#101115', border: '1px solid #1c1d23' }}
+          title="BMS Controller Online"
+        >
+          <span
+            className="w-2 h-2 rounded-full hw-pulse"
+            style={{ backgroundColor: '#22c55e' }}
+          />
+        </div>
       </div>
     </aside>
   );
