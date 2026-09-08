@@ -188,8 +188,28 @@ export async function fetchMeterReadingRange(
       endRow = latestData?.[0];
     }
 
-    const startVal = startRow ? Number(startRow.value) : null;
-    const endVal = endRow ? Number(endRow.value) : null;
+    let startVal = startRow ? Number(startRow.value) : null;
+    let endVal = endRow ? Number(endRow.value) : null;
+
+    // Handle counter reset or rollover (e.g. if startRow came from a previous session before counter reset)
+    if (startVal !== null && endVal !== null && startVal > endVal) {
+      const { data: gteData } = await supabase
+        .from('point_readings')
+        .select('value, recorded_at')
+        .eq('point_name', pointName)
+        .gte('recorded_at', cleanStart)
+        .lte('recorded_at', cleanEnd)
+        .order('recorded_at', { ascending: true })
+        .limit(1);
+
+      if (gteData && gteData[0]) {
+        const candidateStartVal = Number(gteData[0].value);
+        if (candidateStartVal <= endVal) {
+          startRow = gteData[0];
+          startVal = candidateStartVal;
+        }
+      }
+    }
 
     let result: MeterReadingRangeResult;
     if (startVal !== null && endVal !== null) {
@@ -298,20 +318,43 @@ export async function updateUtilityRate(ratePerKwh: number): Promise<boolean> {
 
 /**
  * Upsert tenant invoice record in Supabase
+ * Tries full payload first, then retries without non-schema columns if needed.
  */
 export async function upsertTenantInvoice(invoice: Partial<TenantInvoiceDb>): Promise<boolean> {
-  // Strip non-schema columns (start_date, end_date) to prevent PGRST204 schema cache errors in Supabase
-  const { start_date, end_date, ...dbPayload } = invoice as any;
+  // Clean payload: remove undefined values
+  const cleanPayload: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(invoice)) {
+    if (v !== undefined) cleanPayload[k] = v;
+  }
 
+  // First attempt: send everything
   const { error } = await supabase
     .from('tenant_invoices')
-    .upsert(dbPayload, { onConflict: 'invoice_number' });
+    .upsert(cleanPayload, { onConflict: 'invoice_number' });
 
-  if (error) {
-    console.warn('Warning upserting tenant_invoice:', error.message);
+  if (!error) {
+    console.log('✅ Supabase upsert success:', cleanPayload.invoice_number || cleanPayload.tenant_name);
+    return true;
+  }
+
+  // If schema error (PGRST204 or column not found), retry without start_date/end_date
+  if (error.code === 'PGRST204' || error.message?.includes('column') || error.message?.includes('schema')) {
+    console.warn('Supabase schema issue, retrying without start_date/end_date:', error.message);
+    const { start_date, end_date, ...fallbackPayload } = cleanPayload as any;
+    const { error: retryErr } = await supabase
+      .from('tenant_invoices')
+      .upsert(fallbackPayload, { onConflict: 'invoice_number' });
+
+    if (!retryErr) {
+      console.log('✅ Supabase upsert success (fallback):', fallbackPayload.invoice_number);
+      return true;
+    }
+    console.error('❌ Supabase upsert failed even after fallback:', retryErr.message, fallbackPayload);
     return false;
   }
-  return true;
+
+  console.error('❌ Supabase upsert failed:', error.message, cleanPayload);
+  return false;
 }
 
 /**
@@ -464,6 +507,61 @@ export async function deleteClientAccountDb(id: string): Promise<boolean> {
     }
     return true;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * Sync tenant name and email to Supabase client_accounts table.
+ * Ensures tenant contact emails are permanently recorded in Supabase.
+ */
+export async function syncTenantClientAccount(tenantName: string, email: string): Promise<boolean> {
+  if (!tenantName || !email || !email.includes('@')) return false;
+  try {
+    const cleanTenant = tenantName.trim();
+    const cleanEmail = email.trim();
+
+    const { data: accounts, error: fetchErr } = await supabase
+      .from('client_accounts')
+      .select('id, email, assigned_tenant');
+
+    if (fetchErr) {
+      console.warn('Notice querying client_accounts:', fetchErr.message);
+    }
+
+    const match = (accounts || []).find((a: any) =>
+      (a.assigned_tenant && a.assigned_tenant.toLowerCase() === cleanTenant.toLowerCase()) ||
+      (a.email && a.email.toLowerCase() === cleanEmail.toLowerCase())
+    );
+
+    if (match) {
+      const { error } = await supabase
+        .from('client_accounts')
+        .update({
+          email: cleanEmail,
+          assigned_tenant: cleanTenant,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', match.id);
+      return !error;
+    } else {
+      const newId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const { error } = await supabase.from('client_accounts').insert({
+        id: newId,
+        name: cleanTenant,
+        email: cleanEmail,
+        username: cleanEmail.split('@')[0],
+        password: cleanEmail,
+        role: 'client',
+        assigned_tenant: cleanTenant,
+        status: 'ACTIVE',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      return !error;
+    }
+  } catch (err: any) {
+    console.warn('Notice syncing tenant email to client_accounts:', err.message || err);
     return false;
   }
 }

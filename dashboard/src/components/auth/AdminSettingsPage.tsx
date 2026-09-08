@@ -18,6 +18,7 @@ import { useAuth, type ClientAccount } from '../../context/AuthContext';
 export const AdminSettingsPage: React.FC = () => {
   const {
     user,
+    adminPassword,
     updateAdminProfile,
     resetToEnvDefaults,
     logout,
@@ -36,9 +37,8 @@ export const AdminSettingsPage: React.FC = () => {
   const [username, setUsername] = useState('admin');
   const [phoneNumber, setPhoneNumber] = useState('+855 (0) 12 345 678');
   const [department, setDepartment] = useState('BMS Automation & Controls');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [copiedAdminPass, setCopiedAdminPass] = useState(false);
 
   // New Client Account form states
   const [clientName, setClientName] = useState('');
@@ -65,8 +65,6 @@ export const AdminSettingsPage: React.FC = () => {
       setLastName(parts.slice(1).join(' ') || 'Administrator');
       setEmail(user.email || 'admin@intersys.com');
       setUsername(user.email ? user.email.split('@')[0] : 'admin');
-      setPassword('');
-      setConfirmPassword('');
       setErrorMsg('');
       setSuccessMsg('');
       setWarningMsg('');
@@ -75,22 +73,19 @@ export const AdminSettingsPage: React.FC = () => {
     setHasCustomCreds(!!custom);
   }, [user]);
 
+  const handleCopyAdminPassword = () => {
+    const pw = adminPassword || import.meta.env.VITE_ADMIN_PASSWORD || 'admin12345.intersys';
+    navigator.clipboard.writeText(pw);
+    setCopiedAdminPass(true);
+    setTimeout(() => setCopiedAdminPass(false), 2500);
+  };
+
   // Handle Admin Profile Update
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
     setWarningMsg('');
-
-    if (password && password !== confirmPassword) {
-      setErrorMsg('New password and confirmation password do not match.');
-      return;
-    }
-
-    if (password && password.length < 4) {
-      setErrorMsg('Password must be at least 4 characters.');
-      return;
-    }
 
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim() || 'System Administrator';
 
@@ -99,7 +94,6 @@ export const AdminSettingsPage: React.FC = () => {
       const res = await updateAdminProfile({
         name: fullName,
         email: email.trim(),
-        password: password || undefined,
       });
 
       if (res.success) {
@@ -109,8 +103,6 @@ export const AdminSettingsPage: React.FC = () => {
         } else {
           setSuccessMsg('Administrator account settings updated and synced to Supabase.');
         }
-        setPassword('');
-        setConfirmPassword('');
         setHasCustomCreds(true);
         setTimeout(() => setSuccessMsg(''), 4000);
       } else {
@@ -442,43 +434,62 @@ export const AdminSettingsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Row 4: Password Update */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        New Password <span className="text-slate-500 font-normal">(leave blank to keep current)</span>
+                  {/* Row 4: Administrator Password (View-Only) */}
+                  <div className="pt-1">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-medium text-slate-300">
+                        Administrator Password
                       </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-3.5 pr-10 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
-                        />
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        <span>Read-Only • System Managed</span>
+                      </div>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={adminPassword || import.meta.env.VITE_ADMIN_PASSWORD || 'admin12345.intersys'}
+                        readOnly
+                        autoComplete="off"
+                        aria-label="Administrator Password"
+                        className="w-full bg-[#0e0f13] border border-[#232632] text-slate-200 text-xs rounded-lg pl-3.5 pr-28 py-2.5 cursor-default select-all focus:outline-none focus:border-[#00a4e4]/40"
+                      />
+                      <div className="absolute right-2 flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 transition cursor-pointer"
-                          tabIndex={-1}
+                          className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1a1c24] transition cursor-pointer"
+                          title={showPassword ? 'Hide password' : 'View password'}
                         >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          {showPassword ? <EyeOff className="w-3.5 h-3.5 text-slate-300" /> : <Eye className="w-3.5 h-3.5 text-[#00a4e4]" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCopyAdminPassword}
+                          className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium transition cursor-pointer ${
+                            copiedAdminPass
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                              : 'bg-[#1a1c24] text-slate-300 hover:text-white hover:bg-[#252833] border border-[#2b2e3b]'
+                          }`}
+                          title="Copy password to clipboard"
+                        >
+                          {copiedAdminPass ? (
+                            <>
+                              <CheckCheck className="w-3 h-3 text-emerald-400" />
+                              <span>Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Copy</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                        Confirm New Password
-                      </label>
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full bg-[#0e0f13] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
-                      />
-                    </div>
+                    <p className="mt-1.5 text-[11px] text-slate-500">
+                      The administrator password cannot be changed from the dashboard. You can reveal or copy the active password here.
+                    </p>
                   </div>
                 </div>
 
@@ -582,6 +593,7 @@ export const AdminSettingsPage: React.FC = () => {
                             value={clientPassword}
                             onChange={(e) => setClientPassword(e.target.value)}
                             placeholder="Enter login password"
+                            autoComplete="new-password"
                             className="w-full bg-[#15161b] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-3.5 pr-10 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                             required
                           />

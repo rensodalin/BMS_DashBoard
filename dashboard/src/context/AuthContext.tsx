@@ -40,6 +40,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isLoading: boolean;
+  adminPassword?: string;
   login: (identifier: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   updateAdminProfile: (updates: { name: string; email: string; password?: string }) => Promise<{ success: boolean; error?: string; warning?: string }>;
@@ -66,6 +67,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserSession | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [clientAccounts, setClientAccounts] = useState<ClientAccount[]>([]);
+  const [adminPassword, setAdminPassword] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem(CUSTOM_CREDS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.password) return parsed.password;
+      }
+    } catch {}
+    return ENV_ADMIN_PASSWORD;
+  });
 
   // Load client accounts from storage and sync from Supabase
   useEffect(() => {
@@ -84,6 +95,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchAdminSettingsDb().then(async (dbAdmin) => {
       if (dbAdmin) {
         localStorage.setItem(CUSTOM_CREDS_KEY, JSON.stringify(dbAdmin));
+        if (dbAdmin.password) {
+          setAdminPassword(dbAdmin.password);
+        }
         setUser((prev) => {
           if (prev && prev.role === 'admin') {
             const updated = { ...prev, name: dbAdmin.name, email: dbAdmin.email };
@@ -133,6 +147,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (row && row.name && row.email) {
           const creds = { name: row.name, email: row.email, password: row.password };
           localStorage.setItem(CUSTOM_CREDS_KEY, JSON.stringify(creds));
+          if (row.password) {
+            setAdminPassword(row.password);
+          }
           setUser((prev) => (prev && prev.role === 'admin' ? { ...prev, name: row.name, email: row.email } : prev));
         }
       })
@@ -456,6 +473,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: 'admin',
         loginTime: new Date().toISOString(),
       };
+      setAdminPassword(ENV_ADMIN_PASSWORD);
       setUser(defaultSession);
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(defaultSession));
     } catch {}
@@ -476,6 +494,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!user,
         isAdmin: user?.role === 'admin',
         isLoading,
+        adminPassword,
         login,
         logout,
         updateAdminProfile,

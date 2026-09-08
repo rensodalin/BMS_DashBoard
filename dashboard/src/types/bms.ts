@@ -62,6 +62,7 @@ export interface TenantInvoiceDb {
   meter_name: string;
   tenant_name: string;
   unit_zone: string;
+  tenant_email?: string;
   kwh_reading: number;
   rate_per_kwh: number;
   demand_charge: number;

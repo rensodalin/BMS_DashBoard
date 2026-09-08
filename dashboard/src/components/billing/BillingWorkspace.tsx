@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { SensorPoint, TenantInvoiceDb } from '../../types/bms';
 import { exportToCsv } from '../../lib/exportCsv';
 import { isBillingPoint } from '../../App';
@@ -9,6 +9,9 @@ import {
   upsertTenantInvoice,
   deleteTenantInvoice,
   fetchMeterReadingRange,
+  fetchClientAccountsDb,
+  syncTenantClientAccount,
+  type MeterReadingRangeResult,
   supabase,
 } from '../../lib/supabase';
 
@@ -18,6 +21,7 @@ import { AddTenantInvoiceModal } from './AddTenantInvoiceModal';
 import { EditTenantInvoiceModal } from './EditTenantInvoiceModal';
 import { TenantInvoiceSummaryModal } from './TenantInvoiceSummaryModal';
 import { TenantMeterTrendModal } from './TenantMeterTrendModal';
+import { SendAllInvoicesModal } from './SendAllInvoicesModal';
 
 
 
@@ -44,7 +48,16 @@ const saveOverridesToStorage = (overrides: Record<string, Partial<TenantInvoiceD
 const loadSavedCustomInvoices = (): TenantInvoiceDb[] => {
   try {
     const raw = localStorage.getItem(CUSTOM_INVOICES_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const list: TenantInvoiceDb[] = JSON.parse(raw);
+    const seen = new Set<string>();
+    return list.filter((inv) => {
+      const k = getMeterIdentityKey(inv.meter_name, inv.tenant_name);
+      if (seen.has(k) || (inv.invoice_number && seen.has(inv.invoice_number))) return false;
+      seen.add(k);
+      if (inv.invoice_number) seen.add(inv.invoice_number);
+      return true;
+    });
   } catch {
     return [];
   }
@@ -158,32 +171,42 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
   const [dbInvoices, setDbInvoices] = useState<TenantInvoiceDb[]>([]);
   const [customInvoices, setCustomInvoices] = useState<TenantInvoiceDb[]>(loadSavedCustomInvoices);
   const [invoiceOverrides, setInvoiceOverrides] = useState<Record<string, Partial<TenantInvoiceDb>>>(loadSavedOverrides);
+  const [clientAccounts, setClientAccounts] = useState<any[]>([]);
 
   // Global Date Range Filter state (Defaults to current month from 1st to live second)
   const [startDate, setStartDate] = useState(() => getMonthStartIso());
   const [endDate, setEndDate] = useState(() => formatIsoSecond());
+  const [intervalDataMap, setIntervalDataMap] = useState<Record<string, MeterReadingRangeResult>>({});
 
   // Modals state
   const [isInternalAddOpen, setIsInternalAddOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<TenantInvoiceDb | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<TenantInvoiceDb | null>(null);
   const [trendingInvoice, setTrendingInvoice] = useState<TenantInvoiceDb | null>(null);
+  const [isSendAllOpen, setIsSendAllOpen] = useState(false);
 
 
   const isAddModalOpen = externalIsAddOpen !== undefined ? externalIsAddOpen : isInternalAddOpen;
   const handleCloseAddModal = externalOnCloseAdd || (() => setIsInternalAddOpen(false));
   const handleOpenAddModal = () => setIsInternalAddOpen(true);
 
-  // Load utility rate & tenant invoices from Supabase
+  // Load utility rate, tenant invoices & client accounts from Supabase
   useEffect(() => {
     loadBillingDbData();
 
-    // Supabase Realtime Subscription for tenant invoices
+    // Supabase Realtime Subscription for tenant invoices & client accounts
     const invoiceChannel = supabase
       .channel('realtime_billing_invoices')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tenant_invoices' },
+        () => {
+          loadBillingDbData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'client_accounts' },
         () => {
           loadBillingDbData();
         }
@@ -210,6 +233,11 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
     const invData = await fetchTenantInvoices();
     if (invData && invData.length > 0) {
       setDbInvoices(invData);
+    }
+
+    const clients = await fetchClientAccountsDb();
+    if (clients && clients.length > 0) {
+      setClientAccounts(clients);
     }
   };
 
@@ -244,7 +272,7 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
       // Look up overrides by meter name first, or invoice number if matching
       const overrideByMeter = invoiceOverrides[p.point_name];
       const overrideByInv = invoiceOverrides[invNum];
-      const override = overrideByMeter || overrideByInv || {};
+      const override = { ...(overrideByMeter || {}), ...(overrideByInv || {}) };
 
       // Validate tenant name against meter
       let tenantName = tenantTitle;
@@ -260,13 +288,22 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
       }
 
       const demand = override.demand_charge !== undefined ? override.demand_charge : 25.0;
-      const totalUsd = Number((kwh * ratePerKwh + demand).toFixed(2));
+      const totalUsd = Number((kwh * ratePerKwh).toFixed(2));
       const totalKhr = Number((totalUsd * 4100).toFixed(2));
+
+      // Match tenant email from client_accounts if not set in overrides
+      const clientMatch = clientAccounts.find((c: any) => {
+        const assigned = (c.assignedTenant || c.name || '').toLowerCase().trim();
+        const tLower = tenantName.toLowerCase().trim();
+        return assigned === tLower || tLower.includes(assigned) || assigned.includes(tLower);
+      });
+      const resolvedEmail = override.tenant_email !== undefined ? override.tenant_email : (clientMatch?.email || '');
 
       return {
         id: invNum,
         invoice_number: invNum,
         tenant_name: tenantName,
+        tenant_email: resolvedEmail,
         unit_zone: override.unit_zone || `Floor ${Math.floor(index / 3) + 1} - Suite ${101 + index}`,
         meter_name: p.point_name,
         kwh_reading: kwh,
@@ -280,7 +317,7 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
         status: (override.status || (index % 3 === 0 ? 'PAID' : index % 3 === 1 ? 'PENDING' : 'OVERDUE')) as 'PAID' | 'PENDING' | 'OVERDUE',
       };
     });
-  }, [points, ratePerKwh, startDate, endDate, invoiceOverrides]);
+  }, [points, ratePerKwh, startDate, endDate, invoiceOverrides, clientAccounts]);
 
   const liveKwh = telemetryTenantInvoices.length > 0 ? telemetryTenantInvoices[0].kwh_reading : 1075.0;
 
@@ -288,6 +325,16 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
   // Uses canonical getMeterIdentityKey to guarantee each physical or logical meter only has ONE row in the ledger
   const tenantInvoices: TenantInvoiceDb[] = useMemo(() => {
     const invoiceMap = new Map<string, TenantInvoiceDb>();
+
+    const findClientEmail = (tName: string) => {
+      if (!tName || !clientAccounts || clientAccounts.length === 0) return '';
+      const clean = tName.toLowerCase().trim();
+      const match = clientAccounts.find((c: any) => {
+        const assigned = (c.assignedTenant || c.name || '').toLowerCase().trim();
+        return assigned === clean || clean.includes(assigned) || assigned.includes(clean);
+      });
+      return match?.email || '';
+    };
 
     // 1. Seed with telemetry tenant points from live Niagara discovery
     for (const telInv of telemetryTenantInvoices) {
@@ -300,13 +347,22 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
       const key = getMeterIdentityKey(dbInv.meter_name, dbInv.tenant_name);
       const liveMatch = findLiveMeterPoint(points, dbInv.meter_name, dbInv.tenant_name);
       const kwh = liveMatch ? Number(liveMatch.current_value.toFixed(2)) : dbInv.kwh_reading;
-      const override = invoiceOverrides[dbInv.invoice_number] || invoiceOverrides[dbInv.meter_name] || invoiceOverrides[key] || {};
+      const override = {
+        ...(invoiceOverrides[dbInv.meter_name] || {}),
+        ...(invoiceOverrides[dbInv.invoice_number] || {}),
+        ...(invoiceOverrides[key] || {}),
+      };
       const demand = override.demand_charge !== undefined ? override.demand_charge : dbInv.demand_charge;
-      const totalUsd = Number((kwh * ratePerKwh + demand).toFixed(2));
+      const totalUsd = Number((kwh * ratePerKwh).toFixed(2));
+      const tName = override.tenant_name || dbInv.tenant_name;
+      const tEmail = override.tenant_email !== undefined
+        ? override.tenant_email
+        : (dbInv.tenant_email || findClientEmail(tName));
 
       const merged: TenantInvoiceDb = {
         ...dbInv,
-        tenant_name: override.tenant_name || dbInv.tenant_name,
+        tenant_name: tName,
+        tenant_email: tEmail,
         unit_zone: override.unit_zone || dbInv.unit_zone,
         kwh_reading: kwh,
         rate_per_kwh: ratePerKwh,
@@ -326,13 +382,22 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
       const key = getMeterIdentityKey(custInv.meter_name, custInv.tenant_name);
       const liveMatch = findLiveMeterPoint(points, custInv.meter_name, custInv.tenant_name);
       const kwh = liveMatch ? Number(liveMatch.current_value.toFixed(2)) : custInv.kwh_reading;
-      const override = invoiceOverrides[custInv.invoice_number] || invoiceOverrides[custInv.meter_name] || invoiceOverrides[key] || {};
+      const override = {
+        ...(invoiceOverrides[custInv.meter_name] || {}),
+        ...(invoiceOverrides[custInv.invoice_number] || {}),
+        ...(invoiceOverrides[key] || {}),
+      };
       const demand = override.demand_charge !== undefined ? override.demand_charge : custInv.demand_charge;
-      const totalUsd = Number((kwh * ratePerKwh + demand).toFixed(2));
+      const totalUsd = Number((kwh * ratePerKwh).toFixed(2));
+      const tName = override.tenant_name || custInv.tenant_name;
+      const tEmail = override.tenant_email !== undefined
+        ? override.tenant_email
+        : (custInv.tenant_email || findClientEmail(tName));
 
       const merged: TenantInvoiceDb = {
         ...custInv,
-        tenant_name: override.tenant_name || custInv.tenant_name,
+        tenant_name: tName,
+        tenant_email: tEmail,
         unit_zone: override.unit_zone || custInv.unit_zone,
         meter_name: custInv.meter_name,
         kwh_reading: kwh,
@@ -348,13 +413,97 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
       invoiceMap.set(key, merged);
     }
 
+    // Strictly deduplicate by invoice_number AND meter identity key
+    const uniqueMap = new Map<string, TenantInvoiceDb>();
+    const seenMeters = new Set<string>();
+
+    for (const inv of invoiceMap.values()) {
+      const invNum = inv.invoice_number;
+      const meterKey = getMeterIdentityKey(inv.meter_name, inv.tenant_name);
+
+      if (uniqueMap.has(invNum) || seenMeters.has(meterKey)) {
+        // If already present, prefer the one with matching live telemetry
+        const liveMatch = findLiveMeterPoint(points, inv.meter_name, inv.tenant_name);
+        if (liveMatch) {
+          uniqueMap.set(invNum, inv);
+          seenMeters.add(meterKey);
+        }
+      } else {
+        uniqueMap.set(invNum, inv);
+        seenMeters.add(meterKey);
+      }
+    }
+
     // Sort stably by invoice_number
-    return Array.from(invoiceMap.values()).sort((a, b) => a.invoice_number.localeCompare(b.invoice_number));
-  }, [telemetryTenantInvoices, dbInvoices, customInvoices, points, ratePerKwh, invoiceOverrides, startDate, endDate]);
+    return Array.from(uniqueMap.values()).sort((a, b) => a.invoice_number.localeCompare(b.invoice_number));
+  }, [telemetryTenantInvoices, dbInvoices, customInvoices, points, ratePerKwh, invoiceOverrides, startDate, endDate, clientAccounts]);
+
+  // Auto-sync discovered tenants to Supabase (once per invoice_number per session)
+  const syncedInvoicesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (tenantInvoices.length === 0) return;
+    const toSync = tenantInvoices.filter(
+      (inv) => !syncedInvoicesRef.current.has(inv.invoice_number)
+    );
+    if (toSync.length === 0) return;
+
+    // Mark as synced immediately to avoid duplicate calls
+    toSync.forEach((inv) => syncedInvoicesRef.current.add(inv.invoice_number));
+
+    // Fire-and-forget upserts for all un-synced tenants
+    toSync.forEach((inv) => {
+      upsertTenantInvoice(inv).catch((err) =>
+        console.warn('Auto-sync upsert error for', inv.invoice_number, err)
+      );
+      if (inv.tenant_email) {
+        syncTenantClientAccount(inv.tenant_name, inv.tenant_email).catch(() => {});
+      }
+    });
+  }, [tenantInvoices]);
+
+  // Synchronously fetch and maintain live interval telemetry readings for all tenant meters
+  useEffect(() => {
+    let isMounted = true;
+    let isFetching = false;
+
+    const fetchAllIntervals = async () => {
+      if (isFetching || !tenantInvoices || tenantInvoices.length === 0) return;
+      isFetching = true;
+      try {
+        const results: Record<string, MeterReadingRangeResult> = {};
+        await Promise.all(
+          tenantInvoices.map(async (inv) => {
+            const start = inv.start_date || startDate;
+            const end = inv.end_date || endDate;
+            if (!start || !end) return;
+            const liveMatch = findLiveMeterPoint(points, inv.meter_name, inv.tenant_name);
+            const meter = liveMatch ? liveMatch.point_name : (inv.meter_name || inv.tenant_name);
+            const res = await fetchMeterReadingRange(meter, start, end);
+            results[inv.invoice_number] = res;
+          })
+        );
+        if (isMounted) {
+          setIntervalDataMap((prev) => ({ ...prev, ...results }));
+        }
+      } finally {
+        isFetching = false;
+      }
+    };
+
+    fetchAllIntervals();
+    const interval = setInterval(fetchAllIntervals, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [tenantInvoices, startDate, endDate]);
 
   // Handle adding an invoice successfully
   const handleAddInvoiceSuccess = (newInv?: TenantInvoiceDb) => {
     if (newInv) {
+      if (newInv.tenant_email) {
+        syncTenantClientAccount(newInv.tenant_name, newInv.tenant_email).catch(() => {});
+      }
       const newKey = getMeterIdentityKey(newInv.meter_name, newInv.tenant_name);
       setCustomInvoices((prev) => {
         // Remove any prior entry matching the same meter identity or invoice_number
@@ -425,11 +574,14 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
 
   // Save updated tenant invoice from Edit modal and persist permanently
   const handleSaveUpdatedInvoice = async (updated: TenantInvoiceDb) => {
-    // 1. Immediately update and save overrides to localStorage keyed by meter_name and invoice_number
+    const identityKey = getMeterIdentityKey(updated.meter_name, updated.tenant_name);
+
+    // 1. Immediately update and save overrides to localStorage keyed by meter_name, invoice_number, and identity key
     setInvoiceOverrides((prev) => {
       const record = {
-        ...(prev[updated.meter_name] || prev[updated.invoice_number] || {}),
+        ...(prev[updated.meter_name] || prev[updated.invoice_number] || prev[identityKey] || {}),
         tenant_name: updated.tenant_name,
+        tenant_email: updated.tenant_email,
         unit_zone: updated.unit_zone,
         meter_name: updated.meter_name,
         start_date: updated.start_date,
@@ -442,6 +594,7 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
         ...prev,
         [updated.meter_name]: record,
         [updated.invoice_number]: record,
+        [identityKey]: record,
       };
       saveOverridesToStorage(next);
       return next;
@@ -450,7 +603,7 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
     // 2. Update customInvoices state
     setCustomInvoices((prev) => {
       const next = prev.map((inv) =>
-        inv.invoice_number === updated.invoice_number ? updated : inv
+        inv.invoice_number === updated.invoice_number || inv.meter_name === updated.meter_name ? updated : inv
       );
       saveCustomInvoicesToStorage(next);
       return next;
@@ -459,12 +612,15 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
     // 3. Update dbInvoices state
     setDbInvoices((prev) =>
       prev.map((inv) =>
-        inv.invoice_number === updated.invoice_number ? updated : inv
+        inv.invoice_number === updated.invoice_number || inv.meter_name === updated.meter_name ? updated : inv
       )
     );
 
     // 4. Persist to Supabase
     await upsertTenantInvoice(updated);
+    if (updated.tenant_email) {
+      await syncTenantClientAccount(updated.tenant_name, updated.tenant_email);
+    }
   };
 
   // Delete a tenant invoice from DB and active state
@@ -512,15 +668,28 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
     });
   }, [tenantInvoices, searchQuery, statusFilter]);
 
-  // Summary Metrics
-  const totalBilled = useMemo(
-    () => tenantInvoices.reduce((acc, i) => acc + i.total_cost_usd, 0),
-    [tenantInvoices]
-  );
-  const totalKwh = useMemo(
-    () => tenantInvoices.reduce((acc, i) => acc + i.kwh_reading, 0),
-    [tenantInvoices]
-  );
+  // Summary Metrics calculated dynamically based on selected Date Range (end_date − start_date) interval consumption for all tenants
+  const { totalBilled, totalKwh } = useMemo(() => {
+    let billedSum = 0;
+    let kwhSum = 0;
+
+    for (const inv of tenantInvoices) {
+      const intervalInfo = intervalDataMap[inv.invoice_number];
+      const { kwh } = calculateIntervalConsumption(
+        inv.kwh_reading,
+        inv.start_date || startDate,
+        inv.end_date || endDate,
+        intervalInfo
+      );
+      kwhSum += kwh;
+      billedSum += kwh * (inv.rate_per_kwh || ratePerKwh);
+    }
+
+    return {
+      totalBilled: Number(billedSum.toFixed(2)),
+      totalKwh: Number(kwhSum.toFixed(2)),
+    };
+  }, [tenantInvoices, startDate, endDate, intervalDataMap, ratePerKwh]);
 
   // Export Invoices CSV with Calculated Consumption (End Hour − Start Hour)
   const handleExportInvoices = async () => {
@@ -547,7 +716,8 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
       filteredInvoices.map(async (inv) => {
         const start = inv.start_date || startDate;
         const end = inv.end_date || endDate;
-        const meter = inv.meter_name || inv.tenant_name;
+        const liveMatch = findLiveMeterPoint(points, inv.meter_name, inv.tenant_name);
+        const meter = liveMatch ? liveMatch.point_name : (inv.meter_name || inv.tenant_name);
         const rangeResult = start && end ? await fetchMeterReadingRange(meter, start, end) : undefined;
 
         const {
@@ -555,8 +725,6 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
           durationText,
           startReading,
           endReading,
-          fraction,
-          hasTelemetry,
         } = calculateIntervalConsumption(
           inv.kwh_reading,
           start,
@@ -564,7 +732,9 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
           rangeResult
         );
 
-        const accruedCost = Number((calcKwh * inv.rate_per_kwh + (hasTelemetry ? 0 : inv.demand_charge * fraction)).toFixed(2));
+        const accruedCost = Number((calcKwh * inv.rate_per_kwh).toFixed(2));
+        const totalAmountUsd = Number((calcKwh * inv.rate_per_kwh).toFixed(2));
+        const totalAmountKhr = Number((totalAmountUsd * 4100).toFixed(2));
 
         return [
           inv.invoice_number,
@@ -580,8 +750,8 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
           `$${inv.rate_per_kwh.toFixed(4)}`,
           `$${inv.demand_charge.toFixed(2)}`,
           `$${accruedCost.toFixed(2)}`,
-          `$${inv.total_cost_usd.toFixed(2)}`,
-          `${inv.total_cost_khr.toLocaleString()} KHR`,
+          `$${totalAmountUsd.toFixed(2)}`,
+          `${totalAmountKhr.toLocaleString()} KHR`,
           inv.status,
         ];
       })
@@ -594,6 +764,54 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
     );
   };
 
+
+  // Open the Send All Tenant Invoices batch dispatcher modal
+  const handleSendInvoicesToAll = () => {
+    setIsSendAllOpen(true);
+  };
+
+  // Update tenant billing email directly from the Send All modal
+  const handleUpdateTenantEmail = async (invoiceNumber: string, email: string) => {
+    const targetInv = tenantInvoices.find((i) => i.invoice_number === invoiceNumber);
+    const meterKey = targetInv?.meter_name || '';
+    const identityKey = targetInv ? getMeterIdentityKey(targetInv.meter_name, targetInv.tenant_name) : '';
+
+    setInvoiceOverrides((prev) => {
+      const next = {
+        ...prev,
+        [invoiceNumber]: { ...(prev[invoiceNumber] || {}), tenant_email: email },
+      };
+      if (meterKey) {
+        next[meterKey] = { ...(prev[meterKey] || {}), tenant_email: email };
+      }
+      if (identityKey) {
+        next[identityKey] = { ...(prev[identityKey] || {}), tenant_email: email };
+      }
+      saveOverridesToStorage(next);
+      return next;
+    });
+
+    setCustomInvoices((prev) => {
+      const next = prev.map((inv) =>
+        inv.invoice_number === invoiceNumber ? { ...inv, tenant_email: email } : inv
+      );
+      saveCustomInvoicesToStorage(next);
+      return next;
+    });
+
+    setDbInvoices((prev) =>
+      prev.map((inv) =>
+        inv.invoice_number === invoiceNumber ? { ...inv, tenant_email: email } : inv
+      )
+    );
+
+    if (targetInv) {
+      await upsertTenantInvoice({ ...targetInv, tenant_email: email });
+      if (email) {
+        await syncTenantClientAccount(targetInv.tenant_name, email);
+      }
+    }
+  };
 
   // Apply same Start & End Date/Time to all tenant invoices
   const handleApplyDatesToAll = async (start: string, end: string) => {
@@ -665,8 +883,10 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
         onDeleteInvoice={handleDeleteInvoice}
         onUpdateInvoiceDate={handleUpdateInvoiceDate}
         onApplyDatesToAll={handleApplyDatesToAll}
+        onSendAllInvoices={handleSendInvoicesToAll}
         ratePerKwh={ratePerKwh}
         onRateChange={handleRateChange}
+        intervalDataMap={intervalDataMap}
       />
 
 
@@ -706,6 +926,19 @@ export const BillingWorkspace: React.FC<BillingWorkspaceProps> = ({
         invoice={trendingInvoice}
         ratePerKwh={ratePerKwh}
         onClose={() => setTrendingInvoice(null)}
+      />
+
+      {/* Send All Tenant Invoices by Email Modal (Dynamically Formatted per Tenant) */}
+      <SendAllInvoicesModal
+        isOpen={isSendAllOpen}
+        invoices={filteredInvoices}
+        startDate={startDate}
+        endDate={endDate}
+        ratePerKwh={ratePerKwh}
+        intervalDataMap={intervalDataMap}
+        onClose={() => setIsSendAllOpen(false)}
+        onUpdateTenantEmail={handleUpdateTenantEmail}
+        onViewInvoice={(inv) => setViewingInvoice(inv)}
       />
 
     </div>

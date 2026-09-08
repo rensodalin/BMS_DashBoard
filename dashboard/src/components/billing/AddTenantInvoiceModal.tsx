@@ -9,8 +9,9 @@ import {
   Plus,
   FileText,
   Clock,
+  Mail,
 } from 'lucide-react';
-import { upsertTenantInvoice } from '../../lib/supabase';
+import { upsertTenantInvoice, syncTenantClientAccount } from '../../lib/supabase';
 import type { TenantInvoiceDb } from '../../types/bms';
 
 const formatIsoSecond = (d: Date = new Date()): string => {
@@ -56,6 +57,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
   const [tenantName, setTenantName] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [unitZone, setUnitZone] = useState('');
+  const [tenantEmail, setTenantEmail] = useState('');
   const [meterName, setMeterName] = useState('TenantIntersys_kWh');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -179,6 +181,11 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
       return;
     }
 
+    if (tenantEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenantEmail.trim())) {
+      setErrorMsg('Please enter a valid tenant email address.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const now = new Date();
@@ -187,6 +194,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
       invoice_number: invoiceNumber.trim() || `INV-${now.getFullYear()}-${Date.now().toString().slice(-4)}`,
       tenant_name: tenantName.trim(),
       unit_zone: unitZone.trim() || 'General Commercial Wing',
+      tenant_email: tenantEmail.trim(),
       meter_name: meterName.trim(),
       kwh_reading: kwh,
       rate_per_kwh: ratePerKwh,
@@ -202,13 +210,26 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
     };
 
     try {
-      await upsertTenantInvoice(newInvoice);
-    } catch (err) {
-      console.warn('Supabase upsert caught warning:', err);
-    } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(true);
+      const saved = await upsertTenantInvoice(newInvoice);
+      if (newInvoice.tenant_email) {
+        await syncTenantClientAccount(newInvoice.tenant_name, newInvoice.tenant_email);
+      }
+      if (!saved) {
+        console.warn('Supabase upsert returned false, but proceeding with local state.');
+      }
       onSuccess(newInvoice);
       onClose();
+    } catch (err) {
+      console.error('Error saving tenant invoice:', err);
+      if (newInvoice.tenant_email) {
+        syncTenantClientAccount(newInvoice.tenant_name, newInvoice.tenant_email).catch(() => {});
+      }
+      setErrorMsg('Failed to save to database. The tenant was added locally.');
+      onSuccess(newInvoice);
+      onClose();
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -336,6 +357,22 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
                     placeholder="Floor 3 - Suite 302"
                     className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs rounded px-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Tenant Billing Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+                    <input
+                      type="email"
+                      value={tenantEmail}
+                      onChange={(e) => setTenantEmail(e.target.value)}
+                      placeholder="billing@tenant-company.com"
+                      className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded pl-8 pr-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

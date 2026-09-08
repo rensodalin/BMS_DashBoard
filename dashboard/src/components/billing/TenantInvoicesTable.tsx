@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   Cloud,
   Edit2,
+  Send,
+  Mail,
 } from 'lucide-react';
 import type { TenantInvoiceDb } from '../../types/bms';
 import { fetchMeterReadingRange, type MeterReadingRangeResult } from '../../lib/supabase';
@@ -147,15 +149,18 @@ export const calculateIntervalConsumption = (
   const startReading = rangeResult?.startReading ?? null;
   const endReading = rangeResult?.endReading ?? null;
 
-  if (rangeResult && rangeResult.deltaKwh !== null) {
+  if (rangeResult && rangeResult.deltaKwh !== null && rangeResult.deltaKwh > 0) {
     calculatedKwh = rangeResult.deltaKwh;
     hasTelemetry = true;
-  } else if (startReading !== null && endReading !== null) {
+  } else if (startReading !== null && endReading !== null && endReading > startReading) {
     calculatedKwh = Math.max(0, Number((endReading - startReading).toFixed(3)));
     hasTelemetry = true;
   } else {
-    calculatedKwh = 0;
-    hasTelemetry = false;
+    // If telemetry delta has no positive change or is loading, fall back to baseKwh
+    calculatedKwh = baseKwh > 0
+      ? (fraction > 0 && fraction < 1 ? Number((baseKwh * fraction).toFixed(2)) : baseKwh)
+      : 0;
+    hasTelemetry = rangeResult?.deltaKwh !== null && rangeResult?.deltaKwh !== undefined && rangeResult.deltaKwh > 0;
   }
 
   return {
@@ -194,8 +199,10 @@ interface TenantInvoicesTableProps {
     value: string
   ) => void;
   onApplyDatesToAll?: (start: string, end: string) => void;
+  onSendAllInvoices?: () => void;
   ratePerKwh?: number;
   onRateChange?: (newRate: number) => void;
+  intervalDataMap?: Record<string, MeterReadingRangeResult>;
 }
 
 export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
@@ -214,15 +221,21 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
   onSelectTenantTrend,
   onDeleteInvoice,
   onApplyDatesToAll,
+  onSendAllInvoices,
   ratePerKwh,
   onRateChange,
+  intervalDataMap: propIntervalDataMap,
 }) => {
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
 
-  // Polling for interval telemetry
-  const [intervalDataMap, setIntervalDataMap] = React.useState<Record<string, MeterReadingRangeResult>>({});
+  // Internal fallback polling for interval telemetry
+  const [internalIntervalDataMap, setInternalIntervalDataMap] = React.useState<Record<string, MeterReadingRangeResult>>({});
+  const intervalDataMap = propIntervalDataMap && Object.keys(propIntervalDataMap).length > 0
+    ? propIntervalDataMap
+    : internalIntervalDataMap;
 
   React.useEffect(() => {
+    if (propIntervalDataMap && Object.keys(propIntervalDataMap).length > 0) return;
     let isMounted = true;
     let isFetching = false;
 
@@ -244,7 +257,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
         );
 
         if (isMounted) {
-          setIntervalDataMap((prev) => ({ ...prev, ...results }));
+          setInternalIntervalDataMap((prev) => ({ ...prev, ...results }));
         }
       } finally {
         isFetching = false;
@@ -381,6 +394,21 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
             <Download className="w-3 h-3 text-[#00a4e4]" />
             <span>Export</span>
           </button>
+
+          {onSendAllInvoices && (
+            <button
+              onClick={onSendAllInvoices}
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-white transition cursor-pointer"
+              style={{
+                backgroundColor: '#101115',
+                border: '1px solid #202228',
+              }}
+              title="Email every tenant their invoice in one click"
+            >
+              <Send className="w-3 h-3 text-[#00a4e4]" />
+              <span>Send All</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -579,14 +607,6 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                 </div>
               </th>
 
-              {/* AMOUNT */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-[#858d9d]">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>Amount (USD)</span>
-                  <ChevronsUpDown className="w-3 h-3 text-[#52525b]" />
-                </div>
-              </th>
-
               {/* STATUS */}
               <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-[#858d9d]">
                 <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
@@ -606,7 +626,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
             {invoices.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={7}
                   className="py-14 text-center text-slate-500 font-mono text-xs"
                 >
                   No tenant invoices found for the selected filters.
@@ -691,6 +711,25 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                         <span>•</span>
                         <span>{inv.unit_zone}</span>
                       </div>
+
+                      {inv.tenant_email ? (
+                        <div
+                          className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5"
+                          title={`Billing Email: ${inv.tenant_email}`}
+                        >
+                          <Mail className="w-2.5 h-2.5 text-[#00a4e4] shrink-0" />
+                          <span className="truncate max-w-[150px] text-slate-300">{inv.tenant_email}</span>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => onOpenEditInvoice && onOpenEditInvoice(inv)}
+                          className="text-[10px] text-slate-500 font-mono italic flex items-center gap-1 mt-0.5 cursor-pointer hover:text-amber-400"
+                          title="Click to add tenant billing email"
+                        >
+                          <Mail className="w-2.5 h-2.5 text-slate-600 shrink-0" />
+                          <span>No email set</span>
+                        </div>
+                      )}
                     </td>
 
                     {/* 2. METER */}
@@ -749,16 +788,6 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
 
                       <div className="text-[10px] text-[#64748b] mt-0.5">
                         Base: {inv.kwh_reading.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} kWh
-                      </div>
-                    </td>
-
-                    {/* 5. TOTAL AMOUNT */}
-                    <td className="py-3.5 px-4 font-mono text-xs">
-                      <div className="font-bold text-white text-sm">
-                        ${inv.total_cost_usd.toFixed(2)}
-                      </div>
-                      <div className="text-[10px] text-[#64748b] mt-0.5">
-                        @ ${inv.rate_per_kwh.toFixed(2)}/kWh
                       </div>
                     </td>
 
@@ -832,6 +861,8 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                           <FileText className="w-3 h-3 text-[#858d9d]" />
                           <span>Summary</span>
                         </button>
+
+
 
                         {onOpenEditInvoice && (
                           <button

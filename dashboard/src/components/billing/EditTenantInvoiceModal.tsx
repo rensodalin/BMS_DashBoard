@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, Check, DollarSign, Clock } from 'lucide-react';
-import { upsertTenantInvoice } from '../../lib/supabase';
+import { X, Calendar, Check, Clock, Mail } from 'lucide-react';
+import { upsertTenantInvoice, syncTenantClientAccount, fetchMeterReadingRange } from '../../lib/supabase';
+import { calculateIntervalConsumption } from './TenantInvoicesTable';
 import type { TenantInvoiceDb } from '../../types/bms';
 
 const formatIsoSecond = (d: Date = new Date()): string => {
@@ -42,7 +43,8 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
   const [endDate, setEndDate] = useState('');
   const [billingPeriod, setBillingPeriod] = useState('');
   const [kwhReading, setKwhReading] = useState('');
-  const [demandCharge, setDemandCharge] = useState('');
+  const [demandCharge, setDemandCharge] = useState('0');
+  const [tenantEmail, setTenantEmail] = useState('');
   const [status, setStatus] = useState<'PAID' | 'PENDING' | 'OVERDUE'>('PENDING');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -59,17 +61,45 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
       setEndDate(invoice.end_date || defaultEnd);
       setBillingPeriod(invoice.billing_period || defaultPeriod);
       setKwhReading(invoice.kwh_reading.toString());
-      setDemandCharge(invoice.demand_charge.toString());
+      setDemandCharge((invoice.demand_charge || 0).toString());
+      setTenantEmail(invoice.tenant_email || '');
       setStatus(invoice.status);
       setErrorMsg('');
     }
   }, [invoice]);
 
+  // Recalculate interval energy consumption whenever dates change
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchIntervalKwh = async () => {
+      if (!invoice || !startDate || !endDate) return;
+      try {
+        const meter = invoice.meter_name || invoice.tenant_name;
+        const rangeResult = await fetchMeterReadingRange(meter, startDate, endDate);
+        if (!isCancelled) {
+          const calc = calculateIntervalConsumption(
+            invoice.kwh_reading,
+            startDate,
+            endDate,
+            rangeResult
+          );
+          setKwhReading(calc.kwh.toFixed(2));
+        }
+      } catch (err) {
+        console.warn('Error updating interval kWh in edit modal:', err);
+      }
+    };
+
+    fetchIntervalKwh();
+    return () => {
+      isCancelled = true;
+    };
+  }, [invoice, startDate, endDate]);
+
   if (!isOpen || !invoice) return null;
 
   const parsedKwh = parseFloat(kwhReading) || 0;
-  const parsedDemand = parseFloat(demandCharge) || 0;
-  const totalUsd = Number((parsedKwh * ratePerKwh + parsedDemand).toFixed(2));
+  const totalUsd = Number((parsedKwh * ratePerKwh).toFixed(2));
   const totalKhr = Number((totalUsd * 4100).toFixed(2));
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,10 +107,15 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
     setErrorMsg('');
 
     const kwh = parseFloat(kwhReading);
-    const demand = parseFloat(demandCharge);
+    const demand = parseFloat(demandCharge) || 0;
 
-    if (isNaN(kwh) || isNaN(demand) || kwh < 0 || demand < 0) {
-      setErrorMsg('kWh reading and demand charge must be valid numbers.');
+    if (isNaN(kwh) || kwh < 0) {
+      setErrorMsg('kWh reading must be a valid number.');
+      return;
+    }
+
+    if (tenantEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenantEmail.trim())) {
+      setErrorMsg('Please enter a valid tenant email address.');
       return;
     }
 
@@ -99,6 +134,7 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
       kwh_reading: kwh,
       demand_charge: demand,
       rate_per_kwh: ratePerKwh,
+      tenant_email: tenantEmail.trim(),
       total_cost_usd: totalUsd,
       total_cost_khr: totalKhr,
       status,
@@ -106,6 +142,9 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
     };
 
     await upsertTenantInvoice(updated);
+    if (updated.tenant_email) {
+      await syncTenantClientAccount(updated.tenant_name, updated.tenant_email);
+    }
 
     setIsSubmitting(false);
     onSuccess(updated);
@@ -118,9 +157,7 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#202228] bg-[#121317]">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded bg-[#00a4e4]/10 border border-[#00a4e4]/20 text-[#00a4e4]">
-              <Calendar className="w-4 h-4" />
-            </div>
+
             <div>
               <h3 className="text-sm font-semibold tracking-wide text-white">
                 Edit Tenant Invoice & Billing Parameters
@@ -162,6 +199,24 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase">Meter Tag</span>
                   <span className="text-slate-300 truncate block">{invoice.meter_name}</span>
+                </div>
+              </div>
+
+              {/* Tenant Contact Email for Billing */}
+              <div className="mt-2.5">
+                <label className="block text-xs font-medium text-slate-300 mb-1 flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-slate-500" /> Tenant Billing Email
+
+                </label>
+                <div className="relative">
+                  <Mail className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
+                  <input
+                    type="email"
+                    value={tenantEmail}
+                    onChange={(e) => setTenantEmail(e.target.value)}
+                    placeholder="billing@tenant-company.com"
+                    className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded pl-8 pr-3 py-1.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
+                  />
                 </div>
               </div>
             </div>
@@ -290,22 +345,6 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Demand Fee ($)
-                  </label>
-                  <div className="relative">
-                    <DollarSign className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={demandCharge}
-                      onChange={(e) => setDemandCharge(e.target.value)}
-                      className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-slate-200 text-xs font-mono rounded pl-8 pr-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30"
-                      required
-                    />
-                  </div>
-                </div>
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">
