@@ -12,7 +12,7 @@ import { PointTrendModal } from './components/PointTrendModal';
 import { WeatherTrendModal } from './components/WeatherTrendModal';
 import { EquipmentHealthWorkspace } from './components/EquipmentHealthWorkspace';
 import { BillingWorkspace } from './components/billing';
-import { Search, LayoutGrid, ListFilter, Bell, ChevronLeft, ChevronRight, Zap, Thermometer, X, Plus } from 'lucide-react';
+import { Search, LayoutGrid, ListFilter, Bell, ChevronLeft, ChevronRight, Zap, Thermometer, X, Plus, Building2 } from 'lucide-react';
 import { exportToCsv } from './lib/exportCsv';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginPage } from './components/auth/LoginPage';
@@ -51,11 +51,15 @@ export function isBillingPoint(pt: SensorPoint): boolean {
 }
 
 const DashboardContent: React.FC = () => {
+  const { user, isAdmin, clientAccounts } = useAuth();
   const [points, setPoints] = useState<SensorPoint[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   
+  // Admin building filter state (ALL or specific building)
+  const [adminBuildingFilter, setAdminBuildingFilter] = useState<string>('ALL');
+
   // Filtering & View Controls
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('ALL');
@@ -105,6 +109,13 @@ const DashboardContent: React.FC = () => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Guard: Restrict Billing and Settings to Admin only
+  useEffect(() => {
+    if (!isAdmin && (activeTab === 'billing' || activeTab === 'settings')) {
+      setActiveTab('dashboard');
+    }
+  }, [isAdmin, activeTab]);
 
   const loadPoints = async (showLoadingSpinner = false) => {
     if (showLoadingSpinner) setIsLoading(true);
@@ -165,12 +176,98 @@ const DashboardContent: React.FC = () => {
     exportToCsv(`BMS_Points_Report_${dateStr}.csv`, headers, rows);
   };
 
+  // Distinct list of registered client buildings - 100% matched to clients created by admin
+  const availableBuildings = useMemo(() => {
+    const set = new Set<string>();
+    clientAccounts.forEach((c) => {
+      const t = (c.assignedTenant || c.name)?.trim();
+      if (t && t !== 'All Tenants') {
+        set.add(t);
+      }
+    });
+    return Array.from(set);
+  }, [clientAccounts]);
+
+  // Current active facility name for display
+  const activeFacilityName = useMemo(() => {
+    if (!isAdmin) {
+      return user?.assignedTenant?.trim() || 'Assigned Facility';
+    }
+    return adminBuildingFilter === 'ALL' ? 'All Facilities' : adminBuildingFilter;
+  }, [isAdmin, user?.assignedTenant, adminBuildingFilter]);
+
+  // Filter points according to user clearance and building scope
+  const scopedPoints = useMemo(() => {
+    // 1. Administrator: can view all points across all clients or filter by building
+    if (isAdmin) {
+      if (adminBuildingFilter === 'ALL') {
+        return points;
+      }
+      const filterTarget = adminBuildingFilter.toLowerCase().trim();
+      return points.filter((pt) => {
+        const bName = (pt.building_name || '').toLowerCase().trim();
+        const devName = (pt.device_name || '').toLowerCase().trim();
+        const ptName = pt.point_name.toLowerCase().trim();
+
+        if (filterTarget === 'station hq') {
+          return bName === 'station hq' || devName === 'obixtest' || (!bName && devName !== 'billing');
+        }
+
+        const clientAcc = clientAccounts.find(
+          (c) => (c.assignedTenant || '').toLowerCase().trim() === filterTarget
+        );
+        if (clientAcc?.assignedPoints?.includes(pt.point_name)) return true;
+
+        const keyword = filterTarget.replace(/(facility|building|hq|center|campus|tower)/gi, '').trim();
+        return (
+          bName === filterTarget ||
+          devName === filterTarget ||
+          (keyword.length >= 3 && ptName.includes(keyword))
+        );
+      });
+    }
+
+    // 2. Client / Tenant: strictly restricted to their assigned building
+    const userTenant = (user?.assignedTenant || '').toLowerCase().trim();
+    if (!userTenant || userTenant === 'all tenants') {
+      return points;
+    }
+
+    const clientAcc = clientAccounts.find(
+      (c) =>
+        c.id === user?.id ||
+        (c.email || '').toLowerCase() === (user?.email || '').toLowerCase()
+    );
+    const explicitPoints = new Set(clientAcc?.assignedPoints || user?.assignedPoints || []);
+    const keyword = userTenant.replace(/(facility|building|hq|center|campus|tower)/gi, '').trim();
+
+    return points.filter((pt) => {
+      // 1. Explicit point assignment
+      if (explicitPoints.has(pt.point_name)) return true;
+
+      const bName = (pt.building_name || '').toLowerCase().trim();
+      const devName = (pt.device_name || '').toLowerCase().trim();
+      const ptName = pt.point_name.toLowerCase().trim();
+
+      // 2. Building name tag match
+      if (bName && bName === userTenant) return true;
+
+      // 3. Controller device name match
+      if (devName && devName === userTenant) return true;
+
+      // 4. Facility keyword in point name (e.g. 'koi' in 'KOI_Consumption')
+      if (keyword && keyword.length >= 3 && ptName.includes(keyword)) return true;
+
+      return false;
+    });
+  }, [points, isAdmin, adminBuildingFilter, user?.assignedTenant, user?.assignedPoints, user?.id, user?.email, clientAccounts]);
+
   // Separate operational building points from billing energy meter points in FIXED, STABLE order
   const dashboardPoints = useMemo(() => {
-    return points
+    return scopedPoints
       .filter((pt) => !isBillingPoint(pt))
       .sort((a, b) => a.point_name.localeCompare(b.point_name));
-  }, [points]);
+  }, [scopedPoints]);
 
   // Filtered Points logic for dashboard table (stably ordered)
   const filteredPoints = useMemo(() => {
@@ -236,6 +333,9 @@ const DashboardContent: React.FC = () => {
           onRefresh={() => loadPoints(true)}
           onExportAll={handleExportAll}
           isRefreshing={isRefreshing}
+          availableBuildings={availableBuildings}
+          selectedBuilding={adminBuildingFilter}
+          onSelectBuilding={(b) => setAdminBuildingFilter(b)}
         />
 
         {/* Main Body Grid */}
@@ -243,7 +343,15 @@ const DashboardContent: React.FC = () => {
           
           {/* Left Column: Building Photo, Healthy Score, Alarm Metrics (Hidden in Equipment Health, Billing, and Settings views) */}
           {activeTab !== 'equipment' && workspaceTab !== 'EQUIPMENT' && activeTab !== 'billing' && activeTab !== 'settings' && (
-            <LeftBuildingPanel points={dashboardPoints} />
+            <LeftBuildingPanel
+              points={dashboardPoints}
+              facilityName={activeFacilityName}
+              onUpdateFacilityName={(newName) => {
+                if (isAdmin && adminBuildingFilter !== 'ALL') {
+                  setAdminBuildingFilter(newName);
+                }
+              }}
+            />
           )}
 
           {/* Right Main Content Workspace */}
@@ -477,16 +585,39 @@ const DashboardContent: React.FC = () => {
                 <div className="w-7 h-7 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                 <p className="text-xs text-slate-400 font-mono">Synchronizing Realtime Telemetry...</p>
               </div>
-            ) : activeTab === 'settings' ? (
+            ) : activeTab === 'settings' && isAdmin ? (
               <AdminSettingsPage />
-            ) : activeTab === 'billing' ? (
+            ) : activeTab === 'billing' && isAdmin ? (
               <BillingWorkspace
-                points={points}
+                points={scopedPoints}
                 isAddInvoiceOpen={isBillingAddModalOpen}
                 onCloseAddInvoice={() => setIsBillingAddModalOpen(false)}
               />
             ) : workspaceTab === 'EQUIPMENT' || activeTab === 'equipment' ? (
-              <EquipmentHealthWorkspace points={points} />
+              <EquipmentHealthWorkspace points={dashboardPoints} />
+            ) : filteredPoints.length === 0 && !searchQuery ? (
+              <div className="hw-panel p-12 text-center flex flex-col items-center justify-center gap-3 my-2">
+                <div className="w-12 h-12 rounded-xl bg-[#00a4e4]/10 border border-[#00a4e4]/20 flex items-center justify-center text-[#00a4e4]">
+                  <Building2 className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-white">
+                  No Sensor Points Configured for {activeFacilityName}
+                </h3>
+                <p className="text-xs text-slate-400 max-w-md">
+                  {isAdmin
+                    ? `This facility (${activeFacilityName}) currently has no telemetry points assigned. Click "Add Point" to configure oBIX points for this facility.`
+                    : `Each client manages a distinct building. Your account is assigned to ${activeFacilityName}, which has no telemetry points provisioned yet. Please contact the BMS Administrator to assign or provision points for your building.`}
+                </p>
+                {isAdmin && (
+                  <button
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#00a4e4] hover:bg-[#0092cc] transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Point to {activeFacilityName}</span>
+                  </button>
+                )}
+              </div>
             ) : viewMode === 'TABLE' ? (
               <PointsTable
                 points={filteredPoints}
@@ -512,6 +643,7 @@ const DashboardContent: React.FC = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={() => loadPoints(false)}
+        defaultBuilding={isAdmin && adminBuildingFilter !== 'ALL' ? adminBuildingFilter : (!isAdmin ? user?.assignedTenant : undefined)}
       />
 
       <PointTrendModal

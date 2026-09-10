@@ -19,6 +19,9 @@ interface HeaderProps {
   isRefreshing: boolean;
   activeTab?: string;
   onNavigateTab?: (tab: string) => void;
+  availableBuildings?: string[];
+  selectedBuilding?: string;
+  onSelectBuilding?: (building: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -28,8 +31,11 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing,
   activeTab = 'dashboard',
   onNavigateTab,
+  availableBuildings = [],
+  selectedBuilding = 'ALL',
+  onSelectBuilding,
 }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const [currentDateStr, setCurrentDateStr] = useState('');
   const [liveTimeStr, setLiveTimeStr] = useState('');
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -124,7 +130,7 @@ export const Header: React.FC<HeaderProps> = ({
               letterSpacing: '0.08em',
             }}
           >
-            POWERED BY HONEYWELL FORGE
+
           </span>
 
           <div
@@ -277,12 +283,38 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Controls bar */}
       <div
-        className="px-5 py-2.5 flex items-center justify-end gap-2.5"
+        className="px-5 py-2.5 flex items-center justify-end gap-2.5 flex-wrap"
         style={{
           backgroundColor: '#131418',
           borderBottom: '1px solid #1a1c22',
         }}
       >
+        {/* Building / Facility Scope Selector */}
+        {isAdmin && onSelectBuilding ? (
+          <div className="flex items-center gap-1.5 mr-auto sm:mr-2">
+            <Building2 className="w-3.5 h-3.5 text-[#00a4e4] shrink-0" />
+            <span className="text-[11px] text-slate-400 font-medium hidden md:inline">Scope:</span>
+            <select
+              value={selectedBuilding}
+              onChange={(e) => onSelectBuilding(e.target.value)}
+              className="h-7 px-2.5 rounded text-[11px] font-medium bg-[#18191f] border border-[#252830] text-slate-200 hover:border-[#353842] focus:outline-none focus:border-[#00a4e4] transition-colors cursor-pointer"
+              title="Admin facility filter (view all client points or individual facility)"
+            >
+              <option value="ALL">🏢 All Facilities (All Points)</option>
+              {availableBuildings.map((b) => (
+                <option key={b} value={b}>
+                  🏢 {b}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 h-7 px-2.5 rounded bg-[#18191f] border border-[#252830] text-slate-300 text-[11px] font-medium mr-auto sm:mr-2" title="Your assigned facility">
+            <Building2 className="w-3.5 h-3.5 text-[#00a4e4] shrink-0" />
+            <span className="text-slate-400 hidden sm:inline">Facility:</span>
+            <span className="font-semibold text-white truncate max-w-[160px]">{user?.assignedTenant || 'Assigned Facility'}</span>
+          </div>
+        )}
         {/* Date */}
         <div className="flex items-center gap-2 mr-1">
           <span

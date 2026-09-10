@@ -43,6 +43,9 @@ export async function addOrUpdateSensorPoint(point: Partial<SensorPoint>): Promi
   if (point.obix_url) {
     payload.obix_url = point.obix_url;
   }
+  if (point.building_name) {
+    payload.building_name = point.building_name;
+  }
 
   const { error } = await supabase.from('sensor_points').upsert(
     payload,
@@ -50,9 +53,17 @@ export async function addOrUpdateSensorPoint(point: Partial<SensorPoint>): Promi
   );
 
   if (error) {
-    console.error('Error upserting sensor_point:', error.message);
+    console.warn('Error upserting sensor_point with extra fields:', error.message);
+    let fallbackNeeded = false;
     if (error.message.includes('obix_url') || error.code === 'PGRST204') {
       delete payload.obix_url;
+      fallbackNeeded = true;
+    }
+    if (error.message.includes('building_name') || error.code === 'PGRST204') {
+      delete payload.building_name;
+      fallbackNeeded = true;
+    }
+    if (fallbackNeeded) {
       const { error: retryErr } = await supabase.from('sensor_points').upsert(
         payload,
         { onConflict: 'point_name' }
@@ -448,7 +459,12 @@ export async function fetchClientAccountsDb(): Promise<any[] | null> {
       password: d.password,
       role: d.role,
       assignedTenant: d.assigned_tenant,
+      assignedPoints: d.assigned_points || [],
       status: d.status,
+      siteName: d.site_name || d.name,
+      imageUrl: d.image_url || '/building_hq.jpg',
+      locationAddress: d.location_address || 'Phnom Penh, Cambodia',
+      mapUrl: d.map_url || '',
       createdAt: d.created_at,
     }));
   } catch {
@@ -467,11 +483,16 @@ export async function saveClientAccountDb(account: {
   password: string;
   role: string;
   assignedTenant?: string;
+  assignedPoints?: string[];
   status: string;
+  siteName?: string;
+  imageUrl?: string;
+  locationAddress?: string;
+  mapUrl?: string;
   createdAt?: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const payload = {
+    const payload: any = {
       id: account.id,
       name: account.name,
       email: account.email,
@@ -484,8 +505,46 @@ export async function saveClientAccountDb(account: {
       updated_at: new Date().toISOString(),
     };
 
+    if (account.assignedPoints && account.assignedPoints.length > 0) {
+      payload.assigned_points = account.assignedPoints;
+    }
+    if (account.siteName !== undefined) payload.site_name = account.siteName;
+    if (account.imageUrl !== undefined) payload.image_url = account.imageUrl;
+    if (account.locationAddress !== undefined) payload.location_address = account.locationAddress;
+    if (account.mapUrl !== undefined) payload.map_url = account.mapUrl;
+
     const { error } = await supabase.from('client_accounts').upsert(payload, { onConflict: 'id' });
     if (error) {
+      let fallbackNeeded = false;
+      if (error.message.includes('assigned_points') || error.code === 'PGRST204') {
+        delete payload.assigned_points;
+        fallbackNeeded = true;
+      }
+      if (error.message.includes('site_name') || error.code === 'PGRST204') {
+        delete payload.site_name;
+        fallbackNeeded = true;
+      }
+      if (error.message.includes('image_url') || error.code === 'PGRST204') {
+        delete payload.image_url;
+        fallbackNeeded = true;
+      }
+      if (error.message.includes('location_address') || error.code === 'PGRST204') {
+        delete payload.location_address;
+        fallbackNeeded = true;
+      }
+      if (error.message.includes('map_url') || error.code === 'PGRST204') {
+        delete payload.map_url;
+        fallbackNeeded = true;
+      }
+
+      if (fallbackNeeded) {
+        const { error: retryErr } = await supabase.from('client_accounts').upsert(payload, { onConflict: 'id' });
+        if (retryErr) {
+          console.warn('Notice saving client_account to Supabase fallback:', retryErr.message);
+          return { success: false, error: retryErr.message };
+        }
+        return { success: true };
+      }
       console.warn('Notice saving client_account to Supabase:', error.message);
       return { success: false, error: error.message };
     }
@@ -513,7 +572,7 @@ export async function deleteClientAccountDb(id: string): Promise<boolean> {
 
 /**
  * Sync tenant name and email to Supabase client_accounts table.
- * Ensures tenant contact emails are permanently recorded in Supabase.
+ * Updates email if a matching client account exists; NEVER creates accounts automatically.
  */
 export async function syncTenantClientAccount(tenantName: string, email: string): Promise<boolean> {
   if (!tenantName || !email || !email.includes('@')) return false;
@@ -527,6 +586,7 @@ export async function syncTenantClientAccount(tenantName: string, email: string)
 
     if (fetchErr) {
       console.warn('Notice querying client_accounts:', fetchErr.message);
+      return false;
     }
 
     const match = (accounts || []).find((a: any) =>
@@ -534,36 +594,196 @@ export async function syncTenantClientAccount(tenantName: string, email: string)
       (a.email && a.email.toLowerCase() === cleanEmail.toLowerCase())
     );
 
+    // Only update if account already exists - never resurrect deleted accounts!
     if (match) {
       const { error } = await supabase
         .from('client_accounts')
         .update({
           email: cleanEmail,
-          assigned_tenant: cleanTenant,
           updated_at: new Date().toISOString(),
         })
         .eq('id', match.id);
       return !error;
-    } else {
-      const newId = `client-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const { error } = await supabase.from('client_accounts').insert({
-        id: newId,
-        name: cleanTenant,
-        email: cleanEmail,
-        username: cleanEmail.split('@')[0],
-        password: cleanEmail,
-        role: 'client',
-        assigned_tenant: cleanTenant,
-        status: 'ACTIVE',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-      return !error;
     }
+    return false;
   } catch (err: any) {
     console.warn('Notice syncing tenant email to client_accounts:', err.message || err);
     return false;
   }
 }
+
+// ==============================================================================
+// FACILITY / CLIENT SITE PROFILES DATABASE HELPERS
+// ==============================================================================
+
+export interface FacilityProfileDb {
+  facility_name: string;
+  site_name: string;
+  image_url?: string | null;
+  location_address?: string | null;
+  map_url?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/**
+ * Fetch facility site profile from Supabase by facility name
+ */
+export async function fetchFacilityProfileDb(facilityName: string): Promise<FacilityProfileDb | null> {
+  if (!facilityName) return null;
+  try {
+    const cleanName = facilityName.trim();
+    // 1. First attempt to fetch from dedicated facility_profiles table
+    const { data, error } = await supabase
+      .from('facility_profiles')
+      .select('*')
+      .ilike('facility_name', cleanName)
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      return data as FacilityProfileDb;
+    }
+
+    // 2. If table not found or row missing, fall back to matching client_accounts
+    const { data: clientData } = await supabase
+      .from('client_accounts')
+      .select('*')
+      .or(`assigned_tenant.ilike.${cleanName},name.ilike.${cleanName}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (clientData) {
+      return {
+        facility_name: clientData.assigned_tenant || cleanName,
+        site_name: clientData.site_name || clientData.name || cleanName,
+        image_url: clientData.image_url || null,
+        location_address: clientData.location_address || 'Phnom Penh, Cambodia',
+        map_url: clientData.map_url || null,
+        updated_at: clientData.updated_at,
+      };
+    }
+
+    return null;
+  } catch (err: any) {
+    console.warn('Notice fetching facility profile:', err.message || err);
+    return null;
+  }
+}
+
+/**
+ * Fetch all facility site profiles from Supabase
+ */
+export async function fetchAllFacilityProfilesDb(): Promise<FacilityProfileDb[]> {
+  try {
+    const { data, error } = await supabase
+      .from('facility_profiles')
+      .select('*')
+      .order('facility_name', { ascending: true });
+
+    if (error) {
+      return [];
+    }
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save or update facility site profile in Supabase database.
+ * Upserts to facility_profiles, and synchronizes matching client_accounts.
+ */
+export async function saveFacilityProfileDb(profile: {
+  facility_name: string;
+  site_name: string;
+  image_url?: string;
+  location_address?: string;
+  map_url?: string;
+  client_id?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const cleanFacility = profile.facility_name.trim();
+  const cleanSite = profile.site_name.trim();
+  const nowIso = new Date().toISOString();
+
+  const payload: any = {
+    facility_name: cleanFacility,
+    site_name: cleanSite,
+    image_url: profile.image_url || null,
+    location_address: profile.location_address || 'Phnom Penh, Cambodia',
+    map_url: profile.map_url || null,
+    updated_at: nowIso,
+  };
+
+  let primarySuccess = false;
+  let primaryError: string | undefined;
+
+  try {
+    // 1. Upsert to facility_profiles
+    const { error: facErr } = await supabase
+      .from('facility_profiles')
+      .upsert(payload, { onConflict: 'facility_name' });
+
+    if (!facErr) {
+      primarySuccess = true;
+    } else {
+      primaryError = facErr.message;
+      console.warn('Notice saving to facility_profiles in Supabase:', facErr.message);
+    }
+  } catch (err: any) {
+    primaryError = err.message || 'Error saving facility profile';
+  }
+
+  // 2. Also sync client_accounts if this facility belongs to a registered client (by client_id or facility name)
+  try {
+    let clients: any[] | null = null;
+    if (profile.client_id) {
+      const { data } = await supabase
+        .from('client_accounts')
+        .select('id, assigned_tenant, name')
+        .eq('id', profile.client_id);
+      clients = data;
+    }
+    if (!clients || clients.length === 0) {
+      const { data } = await supabase
+        .from('client_accounts')
+        .select('id, assigned_tenant, name')
+        .or(`assigned_tenant.ilike.${cleanFacility},name.ilike.${cleanFacility}`);
+      clients = data;
+    }
+
+    if (clients && clients.length > 0) {
+      for (const client of clients) {
+        // Attempt full update with site metadata
+        const clientUpdate: any = {
+          name: cleanSite,
+          site_name: cleanSite,
+          image_url: profile.image_url || null,
+          location_address: profile.location_address || 'Phnom Penh, Cambodia',
+          map_url: profile.map_url || null,
+          updated_at: nowIso,
+        };
+
+        const { error: clientErr } = await supabase
+          .from('client_accounts')
+          .update(clientUpdate)
+          .eq('id', client.id);
+
+        if (clientErr) {
+          // If columns site_name/image_url are not in schema yet, fallback to updating name & updated_at
+          await supabase
+            .from('client_accounts')
+            .update({ name: cleanSite, updated_at: nowIso })
+            .eq('id', client.id);
+        }
+      }
+    }
+  } catch (clientSyncErr) {
+    console.warn('Notice updating matching client_accounts:', clientSyncErr);
+  }
+
+  return { success: primarySuccess, error: primaryError };
+}
+
 
 

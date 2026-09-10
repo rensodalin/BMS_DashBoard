@@ -12,8 +12,11 @@ import {
   Trash2,
   CheckCheck,
   Sliders,
+  Building2,
 } from 'lucide-react';
 import { useAuth, type ClientAccount } from '../../context/AuthContext';
+import { fetchSensorPoints } from '../../lib/supabase';
+import type { SensorPoint } from '../../types/bms';
 
 export const AdminSettingsPage: React.FC = () => {
   const {
@@ -50,6 +53,15 @@ export const AdminSettingsPage: React.FC = () => {
   const [clientShowPass, setClientShowPass] = useState(false);
   const [isCreatingClient, setIsCreatingClient] = useState(false);
   const [copiedClientId, setCopiedClientId] = useState<string | null>(null);
+
+  // Live points list to compute point counts per client facility
+  const [allPoints, setAllPoints] = useState<SensorPoint[]>([]);
+
+  useEffect(() => {
+    fetchSensorPoints().then((pts) => {
+      if (pts) setAllPoints(pts);
+    });
+  }, []);
 
   // Feedback states
   const [errorMsg, setErrorMsg] = useState('');
@@ -626,16 +638,20 @@ export const AdminSettingsPage: React.FC = () => {
 
                       {/* Access Scope / Tenant */}
                       <div>
-                        <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                          Assigned Facility Scope
+                        <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center justify-between">
+                          <span>Assigned Facility / Building</span>
+                          <span className="text-[10px] text-sky-400 font-normal">Isolated point scope</span>
                         </label>
                         <input
                           type="text"
                           value={clientTenant}
                           onChange={(e) => setClientTenant(e.target.value)}
-                          placeholder="e.g. KOI Facility, or All Tenants"
+                          placeholder="e.g. nita facility, KOI Facility, BINGO Facility"
                           className="w-full bg-[#15161b] border border-[#232632] focus:border-[#00a4e4] text-white text-xs rounded-lg px-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
                         />
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          When this client logs in, they will only see points assigned to this facility. If this building has no points yet, they will see 0 points.
+                        </p>
                       </div>
                     </div>
 
@@ -713,7 +729,36 @@ export const AdminSettingsPage: React.FC = () => {
                                 </td>
 
                                 <td className="py-3 px-3.5 text-slate-300 text-xs">
-                                  {client.assignedTenant || 'All Tenants'}
+                                  {(() => {
+                                    const tenant = (client.assignedTenant || '').trim();
+                                    const tenantLower = tenant.toLowerCase();
+                                    const keyword = tenantLower.replace(/(facility|building|hq|center|campus|tower)/gi, '').trim();
+
+                                    const pointCount = allPoints.filter((pt) => {
+                                      if (client.assignedPoints?.includes(pt.point_name)) return true;
+                                      if (!tenantLower || tenantLower === 'all tenants') return true;
+                                      const bName = (pt.building_name || '').toLowerCase().trim();
+                                      const devName = (pt.device_name || '').toLowerCase().trim();
+                                      const ptName = pt.point_name.toLowerCase().trim();
+                                      return (
+                                        bName === tenantLower ||
+                                        devName === tenantLower ||
+                                        (keyword.length >= 3 && ptName.includes(keyword))
+                                      );
+                                    }).length;
+
+                                    return (
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="font-semibold text-white flex items-center gap-1">
+                                          <Building2 className="w-3 h-3 text-[#00a4e4]" />
+                                          <span>{tenant || 'All Tenants'}</span>
+                                        </span>
+                                        <span className={`text-[10px] font-mono ${pointCount > 0 ? 'text-emerald-400' : 'text-amber-400/80'}`}>
+                                          {pointCount > 0 ? `${pointCount} Points Monitored` : '0 Points (No points assigned)'}
+                                        </span>
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
 
                                 <td className="py-3 px-3.5">

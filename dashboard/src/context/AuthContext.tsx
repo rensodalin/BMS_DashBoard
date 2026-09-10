@@ -6,6 +6,7 @@ import {
   fetchClientAccountsDb,
   saveClientAccountDb,
   deleteClientAccountDb,
+  saveFacilityProfileDb,
 } from '../lib/supabase';
 
 export interface ClientAccount {
@@ -16,7 +17,12 @@ export interface ClientAccount {
   password: string;
   role: 'client' | 'tenant' | 'viewer';
   assignedTenant?: string;
+  assignedPoints?: string[];
   status: 'ACTIVE' | 'SUSPENDED';
+  siteName?: string;
+  imageUrl?: string;
+  locationAddress?: string;
+  mapUrl?: string;
   createdAt: string;
 }
 
@@ -26,6 +32,11 @@ export interface UserSession {
   name: string;
   role: 'admin' | 'client' | 'tenant' | 'viewer';
   assignedTenant?: string;
+  assignedPoints?: string[];
+  siteName?: string;
+  imageUrl?: string;
+  locationAddress?: string;
+  mapUrl?: string;
   loginTime: string;
 }
 
@@ -118,24 +129,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // Fetch latest Client Accounts from Supabase & bi-directional sync
-    fetchClientAccountsDb().then(async (dbClients) => {
-      if (dbClients && dbClients.length > 0) {
+    // Fetch latest Client Accounts from Supabase as authoritative source of truth
+    fetchClientAccountsDb().then((dbClients) => {
+      if (dbClients !== null) {
         setClientAccounts(dbClients);
-        localStorage.setItem(CLIENT_ACCOUNTS_KEY, JSON.stringify(dbClients));
-
-        // If local storage has accounts that aren't yet in Supabase, push them up
-        const dbIds = new Set(dbClients.map((c) => c.id));
-        for (const localAcc of localClientsList) {
-          if (!dbIds.has(localAcc.id)) {
-            await saveClientAccountDb(localAcc);
-          }
-        }
-      } else if (localClientsList.length > 0) {
-        // Supabase returned 0 rows, sync all local accounts up to Supabase
-        for (const localAcc of localClientsList) {
-          await saveClientAccountDb(localAcc);
-        }
+        try {
+          localStorage.setItem(CLIENT_ACCOUNTS_KEY, JSON.stringify(dbClients));
+        } catch {}
       }
     });
 
@@ -290,6 +290,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: matchedClient.name,
         role: matchedClient.role,
         assignedTenant: matchedClient.assignedTenant,
+        assignedPoints: matchedClient.assignedPoints,
+        siteName: matchedClient.siteName || matchedClient.name,
+        imageUrl: matchedClient.imageUrl || '/building_hq.jpg',
+        locationAddress: matchedClient.locationAddress || 'Phnom Penh, Cambodia',
+        mapUrl: matchedClient.mapUrl || '',
         loginTime: new Date().toISOString(),
       };
 
@@ -353,6 +358,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return { success: false, error: 'An account with this email or username already exists.' };
     }
 
+    const tenantFacility = account.assignedTenant?.trim() || cleanName;
+
     const newAccount: ClientAccount = {
       ...account,
       id: `client-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -360,12 +367,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: cleanEmail,
       username: cleanUser,
       password: cleanPass,
+      assignedTenant: tenantFacility,
+      assignedPoints: account.assignedPoints || [],
+      siteName: cleanName,
+      imageUrl: '/building_hq.jpg',
+      locationAddress: 'Phnom Penh, Cambodia',
+      mapUrl: '',
       createdAt: new Date().toISOString(),
     };
 
     const next = [newAccount, ...clientAccounts];
     saveClientAccounts(next);
     const dbRes = await saveClientAccountDb(newAccount);
+
+    // Also initialize their facility site profile in Supabase database so it's ready immediately
+    await saveFacilityProfileDb({
+      facility_name: tenantFacility,
+      site_name: cleanName,
+      image_url: '/building_hq.jpg',
+      location_address: 'Phnom Penh, Cambodia',
+      map_url: '',
+      client_id: newAccount.id,
+    });
+
     if (!dbRes.success) {
       console.warn('Supabase client account save notice:', dbRes.error);
       return {
@@ -385,6 +409,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveClientAccounts(next);
     const updated = next.find((c) => c.id === id);
     if (updated) {
+      // If currently logged-in user is this client, update their active session immediately
+      setUser((prev) => {
+        if (prev && prev.id === id) {
+          const updatedSession: UserSession = {
+            ...prev,
+            ...updates,
+            name: updates.name || updates.siteName || prev.name,
+            siteName: updates.siteName || prev.siteName,
+            imageUrl: updates.imageUrl || prev.imageUrl,
+            locationAddress: updates.locationAddress || prev.locationAddress,
+            mapUrl: updates.mapUrl !== undefined ? updates.mapUrl : prev.mapUrl,
+          };
+          try {
+            localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(updatedSession));
+          } catch {}
+          return updatedSession;
+        }
+        return prev;
+      });
+
       const dbRes = await saveClientAccountDb(updated);
       if (!dbRes.success) {
         return {
@@ -398,9 +442,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Delete client account
   const deleteClientAccount = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const target = clientAccounts.find((c) => c.id === id);
     const next = clientAccounts.filter((c) => c.id !== id);
     saveClientAccounts(next);
     await deleteClientAccountDb(id);
+
+    if (target) {
+      const facName = target.assignedTenant || target.name;
+      if (facName && facName !== 'Station HQ') {
+        try {
+          await supabase.from('facility_profiles').delete().eq('facility_name', facName);
+        } catch {}
+      }
+    }
     return { success: true };
   };
 

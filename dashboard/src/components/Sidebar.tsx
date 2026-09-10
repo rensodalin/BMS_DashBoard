@@ -16,7 +16,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
     { id: 'points', label: 'Spaces & Points', icon: LayoutGrid },
     { id: 'equipment', label: 'Equipment Health', icon: Activity },
     { id: 'energy', label: 'Energy & Carbon', icon: Leaf },
-    { id: 'billing', label: 'Billing & Metering', icon: CreditCard },
+    { id: 'billing', label: 'Billing & Metering', icon: CreditCard, adminOnly: true },
     { id: 'settings', label: 'Settings', icon: Settings, adminOnly: true },
   ];
 

@@ -1,23 +1,36 @@
 import React, { useState } from 'react';
-import { X, Plus, HardDrive, ShieldAlert, Check, Link } from 'lucide-react';
+import { X, Plus, HardDrive, ShieldAlert, Check, Link, Building2 } from 'lucide-react';
 import { addOrUpdateSensorPoint } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 
 interface AddPointModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  defaultBuilding?: string;
 }
 
-export const AddPointModal: React.FC<AddPointModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const AddPointModal: React.FC<AddPointModalProps> = ({ isOpen, onClose, onSuccess, defaultBuilding }) => {
+  const { clientAccounts } = useAuth();
   const [obixUrl, setObixUrl] = useState('');
   const [pointName, setPointName] = useState('');
   const [deviceName, setDeviceName] = useState('');
+  const [buildingName, setBuildingName] = useState(defaultBuilding || 'Station HQ');
+  const [customBuilding, setCustomBuilding] = useState('');
   const [currentValue, setCurrentValue] = useState('25.0');
   const [alertThreshold, setAlertThreshold] = useState('30.0');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
+
+  const knownBuildings = Array.from(
+    new Set(
+      clientAccounts
+        .map((c) => c.assignedTenant?.trim())
+        .filter(Boolean) as string[]
+    )
+  ).filter((b) => b !== 'All Tenants' && b !== 'Station HQ');
 
   const handleObixUrlChange = (rawUrl: string) => {
     setObixUrl(rawUrl);
@@ -71,10 +84,12 @@ export const AddPointModal: React.FC<AddPointModalProps> = ({ isOpen, onClose, o
 
     setIsSubmitting(true);
     const isAlarm = val >= threshold;
+    const finalBuilding = buildingName === '__CUSTOM__' ? customBuilding.trim() : buildingName.trim();
 
     const ok = await addOrUpdateSensorPoint({
       point_name: pointName.trim(),
       device_name: deviceName.trim() || 'Niagara Controller',
+      building_name: finalBuilding || 'Station HQ',
       obix_url: obixUrl.trim() || undefined,
       current_value: val,
       alert_threshold: threshold,
@@ -107,7 +122,7 @@ export const AddPointModal: React.FC<AddPointModalProps> = ({ isOpen, onClose, o
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">Add Sensor Point / oBIX URL</h3>
-              <p className="text-[11px] text-slate-400">Configure telemetry endpoint or add manual sensor</p>
+              <p className="text-[11px] text-slate-400">Configure telemetry endpoint and assign to building</p>
             </div>
           </div>
           <button
@@ -119,16 +134,46 @@ export const AddPointModal: React.FC<AddPointModalProps> = ({ isOpen, onClose, o
         </div>
 
         {errorMsg && (
-          <div
-            className="p-2.5 mb-3 rounded text-xs flex items-center gap-2"
-            style={{ backgroundColor: 'rgba(229, 43, 32, 0.12)', border: '1px solid rgba(229, 43, 32, 0.3)', color: '#ef4444' }}
-          >
-            <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+          <div className="p-2.5 rounded text-xs bg-red-500/10 border border-red-500/20 text-red-400 mb-3 flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-left">
+          {/* Facility / Building Assignment */}
+          <div className="p-3 rounded" style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}>
+            <label className="block text-xs font-semibold text-sky-400 mb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5" /> Assigned Facility / Client Building
+              </span>
+              <span className="text-[10px] text-slate-500 font-normal">Controls client access</span>
+            </label>
+            <select
+              value={buildingName}
+              onChange={(e) => setBuildingName(e.target.value)}
+              className="w-full hw-input text-xs font-medium cursor-pointer"
+            >
+              <option value="Station HQ">🏢 Station HQ (Primary BMS Controller)</option>
+              {knownBuildings.map((b) => (
+                <option key={b} value={b}>
+                  🏢 {b} (Client Facility)
+                </option>
+              ))}
+              <option value="__CUSTOM__">➕ Enter custom building name...</option>
+            </select>
+            {buildingName === '__CUSTOM__' && (
+              <input
+                type="text"
+                value={customBuilding}
+                onChange={(e) => setCustomBuilding(e.target.value)}
+                placeholder="e.g. nita facility, Diamond Tower, Building C"
+                className="w-full hw-input text-xs font-medium mt-2"
+                required
+              />
+            )}
+          </div>
+
           {/* oBIX URL Box */}
           <div className="p-3 rounded" style={{ backgroundColor: '#17181c', border: '1px solid #282a32' }}>
             <label className="block text-xs font-semibold text-cyan-400 mb-1 flex items-center justify-between">
