@@ -314,7 +314,7 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
 
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white tracking-tight">
+                <h2 className="text-base font-bold text-white">
                   {invoice.tenant_name}
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/80 text-cyan-300 border border-cyan-800/50">
@@ -379,8 +379,8 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
               border: '1px solid #2d313a',
             }}
           >
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center justify-between">
-              <span>LIVE CONSUMPTION</span>
+            <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+              <span>Live Consumption</span>
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             </div>
             <div className="font-mono text-xl font-bold text-amber-300 mt-1">
@@ -400,8 +400,8 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
               border: '1px solid #2d313a',
             }}
           >
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center justify-between">
-              <span>TOTAL ACCRUED COST</span>
+            <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+              <span>Total Accrued Cost</span>
               <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <div className="font-mono text-xl font-bold text-emerald-400 mt-1">
@@ -420,8 +420,8 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
               border: '1px solid #2d313a',
             }}
           >
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center justify-between">
-              <span>1-MIN INTERVAL RATE</span>
+            <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+              <span>1-Min Interval Rate</span>
               <Activity className="w-3.5 h-3.5 text-cyan-400" />
             </div>
             <div className="font-mono text-xs text-slate-200 mt-1 space-y-0.5">
@@ -444,8 +444,8 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
               border: '1px solid #2d313a',
             }}
           >
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center justify-between">
-              <span>TELEMETRY STREAM</span>
+            <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
+              <span>Telemetry Stream</span>
               <Layers className="w-3.5 h-3.5 text-purple-400" />
             </div>
             <div className="font-mono text-base font-bold text-white mt-1 flex items-center justify-between">

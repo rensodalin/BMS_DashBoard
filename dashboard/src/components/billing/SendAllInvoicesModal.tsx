@@ -7,13 +7,15 @@ import {
   Edit2,
   Check,
   Search,
-  Settings,
   Zap,
   Loader2,
   Download,
   Eye,
   Calendar,
   Building2,
+  Copy,
+  ExternalLink,
+  Trash2,
 } from 'lucide-react';
 import type { TenantInvoiceDb } from '../../types/bms';
 import {
@@ -125,7 +127,7 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
   intervalDataMap: propIntervalDataMap,
   onClose,
   onUpdateTenantEmail,
-  onViewInvoice,
+  onViewInvoice: _onViewInvoice,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInvoices, setSelectedInvoices] = useState<Record<string, boolean>>({});
@@ -144,6 +146,67 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
   const [internalIntervalDataMap, setInternalIntervalDataMap] = useState<
     Record<string, { startReading: number | null; endReading: number | null; deltaKwh: number | null } | null>
   >({});
+  const [previewItem, setPreviewItem] = useState<{
+    invoice: TenantInvoiceDb;
+    billValues: TenantBillCalculatedValues;
+    msg: TenantEmailMessage;
+    hasEmail: boolean;
+  } | null>(null);
+  const [previewSubject, setPreviewSubject] = useState('');
+  const [previewBody, setPreviewBody] = useState('');
+  const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [isSendingSingle, setIsSendingSingle] = useState(false);
+
+  const handleOpenPreview = (item: {
+    invoice: TenantInvoiceDb;
+    billValues: TenantBillCalculatedValues;
+    msg: TenantEmailMessage;
+    hasEmail: boolean;
+  }) => {
+    setPreviewItem(item);
+    setPreviewSubject(item.msg.subject);
+    setPreviewBody(item.msg.body);
+  };
+
+  const handleSendSinglePreview = async (item: {
+    invoice: TenantInvoiceDb;
+    billValues: TenantBillCalculatedValues;
+    msg: TenantEmailMessage;
+    hasEmail: boolean;
+  }) => {
+    if (!hasGmailSmtpConfig()) {
+      setIsEmailSettingsOpen(true);
+      return;
+    }
+    setIsSendingSingle(true);
+    try {
+      const res = await sendInvoiceEmailViaSmtp({
+        invoice: item.invoice,
+        startDate: item.invoice.start_date || startDate,
+        endDate: item.invoice.end_date || endDate,
+        ratePerKwh,
+        customSubject: previewSubject,
+        customBody: previewBody,
+        telemetryRange: activeIntervalDataMap[item.invoice.invoice_number] || null,
+      });
+      if (res.success) {
+        setSentInvoices((prev) => ({ ...prev, [item.invoice.invoice_number]: true }));
+        setErrorInvoices((prev) => {
+          const next = { ...prev };
+          delete next[item.invoice.invoice_number];
+          return next;
+        });
+        alert(`Success! Dispatched utility statement to ${item.invoice.tenant_email}`);
+        setPreviewItem(null);
+      } else {
+        alert(`Failed to send email: ${res.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`Failed to send email: ${err.message || err}`);
+    } finally {
+      setIsSendingSingle(false);
+    }
+  };
 
   // Combine parent provided intervals with internal fetched ones
   const activeIntervalDataMap = useMemo(() => {
@@ -374,34 +437,33 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-xs select-none overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/40 backdrop-blur-xs select-none overflow-y-auto">
       {/* Executive Modal Container */}
-      <div className="w-full max-w-5xl bg-[#0e1015] border border-[#1e222d] rounded-xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden my-auto">
+      <div className="w-full max-w-5xl bg-white border border-slate-100 rounded-md shadow-2xl flex flex-col max-h-[90vh] overflow-hidden my-auto">
 
         {/* ── 1. Clean Executive Header ── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#1c202a] bg-[#12141c]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white">
           <div className="flex items-center gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-white tracking-wide">
+                <h2 className="text-base font-bold text-slate-800">
                   Send All Utility Invoices
                 </h2>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#181b24] text-slate-300 border border-[#262b3a]">
+                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F]">
                   {totalCount} Tenants
                 </span>
                 {missingEmailCount > 0 && (
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded bg-[#fef2f2] text-[#FF3523]">
                     {missingEmailCount} Missing Email
                   </span>
                 )}
               </div>
-
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-[#1a1d28] transition cursor-pointer"
+            className="p-2 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
             aria-label="Close modal"
           >
             <X className="w-4 h-4" />
@@ -409,67 +471,29 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
         </div>
 
         {/* ── 2. Unified Controls & Method Bar ── */}
-        <div className="px-6 py-3 border-b border-[#1c202a] bg-[#0f1118] flex flex-wrap items-center justify-between gap-3">
-          {/* Delivery Method Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400 font-medium font-sans">Method:</span>
-            <div className="inline-flex rounded-lg bg-[#151822] p-0.5 border border-[#222736]">
-              <button
-                type="button"
-                onClick={() => setEmailClient('smtp')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${emailClient === 'smtp'
-                  ? 'bg-[#005a87] text-white shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
-                  }`}
-              >
-                <Zap className="w-3 h-3 text-[#38bdf8]" />
-                <span>Gmail SMTP (Auto + PDF)</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setEmailClient('gmail')}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer ${emailClient === 'gmail'
-                  ? 'bg-[#222736] text-white shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
-                  }`}
-              >
-                <span>Gmail Web</span>
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsEmailSettingsOpen(true)}
-              className="p-1.5 rounded-md bg-[#151822] hover:bg-[#1d2230] text-slate-400 hover:text-slate-200 border border-[#222736] transition cursor-pointer"
-              title="Configure Gmail SMTP App Password"
-            >
-              <Settings className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
+        <div className="px-6 py-3 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3">
           {/* Search Input, Select All & Quick Send All Button */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 ml-auto">
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search tenant or invoice..."
-                className="w-48 bg-[#151822] border border-[#222736] focus:border-[#00a4e4] text-slate-200 text-xs rounded-md pl-8 pr-3 py-1 placeholder:text-slate-500 focus:outline-none transition"
+                className="w-48 bg-white border border-slate-200 focus:border-[#001F3F] text-slate-800 text-xs rounded-md pl-8 pr-3 py-1.5 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#001F3F]/20 shadow-2xs transition"
               />
             </div>
 
-            <div className="flex items-center gap-1.5 pl-2 border-l border-[#222736]">
+            <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200">
               <input
                 type="checkbox"
                 id="select-all-invoices"
                 checked={selectedCount === totalCount && totalCount > 0}
                 onChange={handleToggleAll}
-                className="w-3.5 h-3.5 rounded bg-[#151822] border-[#2c3245] accent-[#00a4e4] cursor-pointer"
+                className="w-3.5 h-3.5 rounded bg-white border-slate-300 text-[#001F3F] focus:ring-[#001F3F] cursor-pointer"
               />
-              <label htmlFor="select-all-invoices" className="text-xs text-slate-300 font-medium cursor-pointer select-none">
+              <label htmlFor="select-all-invoices" className="text-xs text-slate-700 font-bold cursor-pointer select-none">
                 Select All ({selectedCount})
               </label>
             </div>
@@ -479,7 +503,7 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
               type="button"
               onClick={handleStartBatch}
               disabled={isSendingBatch || selectedWithEmail.length === 0}
-              className="flex items-center gap-1.5 px-3.5 py-1 rounded-md bg-[#00a4e4] hover:bg-[#0092cc] text-white text-xs font-semibold shadow-xs transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-[#001F3F] hover:bg-[#001428] text-white text-xs font-bold shadow-sm shadow-[#001F3F]/20 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               title="Send invoices to all selected tenants"
             >
               {isSendingBatch ? (
@@ -501,7 +525,7 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
         <div className="flex-1 overflow-y-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="border-b border-[#1c202a] bg-[#0c0d12] text-[10.5px] uppercase tracking-wider text-slate-400 font-medium sticky top-0 z-10">
+              <tr className="border-b border-[#1c202a] bg-[#0c0d12] text-xs text-slate-300 font-semibold sticky top-0 z-10">
                 <th className="py-2.5 px-4 w-10 text-center">
                   <span className="sr-only">Select</span>
                 </th>
@@ -522,7 +546,8 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
                   </td>
                 </tr>
               ) : (
-                filteredItems.map(({ invoice, billValues, hasEmail }) => {
+                filteredItems.map((item) => {
+                  const { invoice, billValues, hasEmail } = item;
                   const isSelected = !!selectedInvoices[invoice.invoice_number];
                   const isSent = !!sentInvoices[invoice.invoice_number];
                   const isEditing = editingEmailInv === invoice.invoice_number;
@@ -665,16 +690,12 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
                       {/* Action Buttons: View Bill & Download PDF (No row Gmail button) */}
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {/* View Bill Summary Button */}
+                          {/* View Gmail Message Preview Button */}
                           <button
                             type="button"
-                            onClick={() => {
-                              if (onViewInvoice) {
-                                onViewInvoice(invoice);
-                              }
-                            }}
+                            onClick={() => handleOpenPreview(item)}
                             className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#151822] hover:bg-[#1f2433] text-slate-300 hover:text-white border border-[#222736] hover:border-[#00a4e4] transition cursor-pointer text-xs font-medium"
-                            title={`View billing summary for ${invoice.tenant_name}`}
+                            title={`View Gmail message for ${invoice.tenant_name}`}
                           >
                             <Eye className="w-3.5 h-3.5 text-[#00a4e4]" />
                             <span>View</span>
@@ -771,7 +792,7 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
               type="button"
               onClick={handleStartBatch}
               disabled={isSendingBatch || selectedWithEmail.length === 0}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-[#005a87] hover:bg-[#0070a6] text-white font-semibold shadow-md transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-5 py-2 rounded-md bg-[#001F3F] hover:bg-[#001428] text-white font-semibold shadow-md transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSendingBatch ? (
                 <>
@@ -802,6 +823,191 @@ export const SendAllInvoicesModal: React.FC<SendAllInvoicesModalProps> = ({
           setEmailClient('smtp');
         }}
       />
+
+      {/* ── Authentic Google Gmail Compose Window ── */}
+      {previewItem && (
+        <div 
+          className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-5 bg-black/65 backdrop-blur-xs select-none animate-in fade-in duration-100"
+          onClick={() => setPreviewItem(null)}
+        >
+          <div
+            className="w-full max-w-2xl bg-[#202124] rounded-lg shadow-2xl border border-[#3c4043] flex flex-col max-h-[90vh] overflow-hidden text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Real Gmail Window Bar */}
+            <div className="h-10 px-4 bg-[#292a2d] border-b border-[#3c4043] flex items-center justify-between shrink-0">
+              <span className="text-xs font-medium text-[#e8eaed] select-none">
+                New Message
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const editedGmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(
+                      previewItem.invoice.tenant_email || ''
+                    )}&su=${encodeURIComponent(previewSubject)}&body=${encodeURIComponent(previewBody)}`;
+                    window.open(editedGmailUrl, '_blank');
+                  }}
+                  className="w-7 h-7 rounded flex items-center justify-center text-[#9aa0a6] hover:text-[#e8eaed] hover:bg-[#35373a] transition cursor-pointer"
+                  title="Open in full Gmail tab"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewItem(null)}
+                  className="w-7 h-7 rounded flex items-center justify-center text-[#9aa0a6] hover:text-[#e8eaed] hover:bg-[#35373a] transition cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Recipients (To) Row */}
+            <div className="px-4 py-2 border-b border-[#3c4043] flex items-center gap-2 shrink-0">
+              <span className="text-xs text-[#9aa0a6] w-12 shrink-0 select-none">To</span>
+              <div className="flex-1 flex items-center gap-2 min-w-0">
+                {previewItem.invoice.tenant_email ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#303134] text-xs text-[#e8eaed] border border-[#5f6368] truncate max-w-full">
+                    <span>{previewItem.invoice.tenant_name}</span>
+                    <span className="text-[#9aa0a6]">&lt;{previewItem.invoice.tenant_email}&gt;</span>
+                  </span>
+                ) : (
+                  <span className="text-amber-400 text-xs flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5" /> No recipient email set for {previewItem.invoice.tenant_name}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Subject Row (Editable) */}
+            <div className="px-4 py-2 border-b border-[#3c4043] flex items-center gap-2 shrink-0">
+              <span className="text-xs text-[#9aa0a6] w-12 shrink-0 select-none">Subject</span>
+              <input
+                type="text"
+                value={previewSubject}
+                onChange={(e) => setPreviewSubject(e.target.value)}
+                placeholder="Subject"
+                className="flex-1 bg-transparent text-xs text-[#e8eaed] font-normal focus:outline-none placeholder:text-[#9aa0a6]"
+              />
+            </div>
+
+            {/* Email Body (Editable Text Area) */}
+            <div className="p-4 flex-1 overflow-y-auto space-y-3 bg-[#202124] flex flex-col min-h-0">
+              <textarea
+                value={previewBody}
+                onChange={(e) => setPreviewBody(e.target.value)}
+                placeholder="Type email body here..."
+                rows={9}
+                className="w-full flex-1 bg-transparent text-xs text-[#e8eaed] font-sans leading-relaxed resize-none focus:outline-none placeholder:text-[#9aa0a6] select-text min-h-[190px]"
+              />
+
+              {/* Real Gmail Attachment Chip */}
+              <div className="pt-2 shrink-0">
+                <div
+                  onClick={() =>
+                    downloadInvoicePdf(
+                      previewItem.invoice,
+                      previewItem.invoice.start_date || startDate,
+                      previewItem.invoice.end_date || endDate,
+                      ratePerKwh,
+                      null,
+                      activeIntervalDataMap[previewItem.invoice.invoice_number] || null
+                    )
+                  }
+                  className="inline-flex items-center justify-between gap-3 px-3 py-2 rounded-lg bg-[#28292c] hover:bg-[#303236] border border-[#3c4043] text-left transition cursor-pointer max-w-md group"
+                  title="Click to download PDF statement"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded bg-[#ea4335]/15 flex items-center justify-center text-[#ea4335] shrink-0 font-bold text-[10px]">
+                      PDF
+                    </div>
+                    <div className="truncate">
+                      <div className="text-xs text-[#e8eaed] font-medium truncate group-hover:text-white">
+                        Invoice-{previewItem.invoice.invoice_number}.pdf
+                      </div>
+                      <div className="text-[10px] text-[#9aa0a6]">
+                        42 KB
+                      </div>
+                    </div>
+                  </div>
+                  <Download className="w-3.5 h-3.5 text-[#9aa0a6] group-hover:text-[#e8eaed] shrink-0 ml-2" />
+                </div>
+              </div>
+            </div>
+
+            {/* Real Gmail Bottom Toolbar */}
+            <div className="h-12 px-4 border-t border-[#3c4043] bg-[#202124] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                {/* Google Blue Send Button */}
+                <button
+                  type="button"
+                  onClick={() => handleSendSinglePreview(previewItem)}
+                  disabled={!previewItem.invoice.tenant_email || isSendingSingle}
+                  className="px-5 py-1.5 rounded-full bg-[#1a73e8] hover:bg-[#1b66c9] active:bg-[#174ea6] text-white text-xs font-medium flex items-center gap-1.5 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-xs"
+                >
+                  {isSendingSingle ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Sending...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Send</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Open in Gmail Web Pill */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const editedGmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(
+                      previewItem.invoice.tenant_email || ''
+                    )}&su=${encodeURIComponent(previewSubject)}&body=${encodeURIComponent(previewBody)}`;
+                    window.open(editedGmailUrl, '_blank');
+                  }}
+                  className="px-3 py-1.5 rounded-md hover:bg-[#2e3033] text-[#8ab4f8] text-xs font-medium flex items-center gap-1 transition cursor-pointer"
+                  title="Open draft in Gmail Web (mail.google.com)"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  <span>Open in Gmail Web</span>
+                </button>
+
+                {/* Copy Text Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(previewBody);
+                    setCopiedMsgId(previewItem.invoice.invoice_number);
+                    setTimeout(() => setCopiedMsgId(null), 2000);
+                  }}
+                  className="p-2 rounded hover:bg-[#2e3033] text-[#9aa0a6] hover:text-[#e8eaed] transition cursor-pointer"
+                  title="Copy message body text"
+                >
+                  {copiedMsgId === previewItem.invoice.invoice_number ? (
+                    <Check className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              {/* Discard / Close Button */}
+              <button
+                type="button"
+                onClick={() => setPreviewItem(null)}
+                className="p-2 rounded hover:bg-[#2e3033] text-[#9aa0a6] hover:text-[#e8eaed] transition cursor-pointer"
+                title="Discard draft"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

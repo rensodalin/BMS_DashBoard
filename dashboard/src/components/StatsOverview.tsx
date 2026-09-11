@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { SensorPoint } from '../types/bms';
-import { Cloud, Zap, ShieldCheck, Activity, CloudSun, Droplets, TrendingUp } from 'lucide-react';
+import { Droplets, TrendingUp } from 'lucide-react';
 import { formatPointReading } from './PointsGrid';
 
 interface StatsOverviewProps {
@@ -60,8 +60,8 @@ export function isEquipmentRunning(pt: SensorPoint): boolean {
   return isPumpRunning(pt) || isAcbEnergized(pt);
 }
 
-export const StatsOverview: React.FC<StatsOverviewProps> = ({ 
-  points, 
+export const StatsOverview: React.FC<StatsOverviewProps> = ({
+  points,
   onOpenWeatherTrend,
   weather: propWeather,
   onUpdateWeather,
@@ -108,105 +108,134 @@ export const StatsOverview: React.FC<StatsOverviewProps> = ({
   const tempSensors = points.filter((p) => formatPointReading(p).isTemp).length;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-3 select-none">
-      
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-5 select-none">
+
       {/* ── Card 1: Connectivity ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between">
-        <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
-          <span>Connectivity</span>
-          <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">Connectivity</span>
+
         </div>
         <div>
-          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 hw-pulse" />
-            <span>Online</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">{totalPoints}/{totalPoints}</span>
+            <span className="text-[11px] font-medium text-slate-500">Points</span>
           </div>
-          <div className="text-[11px] font-mono text-slate-300 mt-1">
-            <span className="font-bold text-white text-base">{totalPoints}/{totalPoints}</span>
-            <span className="text-slate-400 text-[10px] ml-1 uppercase">Devices</span>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#001F3F] animate-pulse" />
+              100% Online
+            </span>
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 font-mono mt-1">
-          Niagara Driver Connected
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <span>Niagara Driver Connected</span>
+
         </div>
       </div>
 
       {/* ── Card 2: System Telemetry ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between">
-        <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
-          <span>System Telemetry</span>
-          <Activity className="w-3.5 h-3.5 text-cyan-400" />
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">System Telemetry</span>
+
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold font-mono text-white">{totalPoints}</span>
-          <span className="text-xs text-cyan-400 font-mono">Live Points</span>
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">{totalPoints}</span>
+            <span className="text-[11px] font-medium text-slate-500">Channels</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#001F3F] animate-pulse" />
+              Live Stream Active
+            </span>
+          </div>
         </div>
-        <div className="text-[10px] text-slate-500 font-mono">
-          {tempSensors} Temps • {totalPoints - tempSensors} Status/Enums
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <span>{tempSensors} Temps</span>
+          <span>{totalPoints - tempSensors} Status/Enums</span>
         </div>
       </div>
 
       {/* ── Card 3: Outdoor Weather (Phnom Penh Ambient) ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between relative group">
-        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
-          <span className="flex items-center gap-1">
-            <CloudSun className="w-3.5 h-3.5 text-amber-500" /> Phnom Penh Ambient
-          </span>
-          {onOpenWeatherTrend && (
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">Outdoor Ambient</span>
+
+        </div>
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">{weather.temp.toFixed(1)}</span>
+            <span className="text-[11px] font-medium text-slate-500">°C Ambient</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
             <button
+              type="button"
               onClick={onOpenWeatherTrend}
-              className="flex items-center gap-0.5 text-[10px] text-cyan-400 hover:text-cyan-300 transition cursor-pointer font-mono"
-              title="View Weather Trend Chart"
+              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold hover:bg-[#001F3F] hover:text-white transition-colors cursor-pointer"
+              title="Click to view weather trend"
             >
-              <TrendingUp className="w-3 h-3" /> Trend
+              <Droplets className="w-3 h-3" />
+              <span>{weather.humidity}% Humidity</span>
+              {onOpenWeatherTrend && <TrendingUp className="w-2.5 h-2.5 ml-0.5" />}
             </button>
-          )}
-        </div>
-        <div
-          className="flex items-baseline justify-between cursor-pointer"
-          onClick={onOpenWeatherTrend}
-        >
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-bold font-mono text-amber-500">{weather.temp.toFixed(1)}</span>
-            <span className="text-xs text-slate-400">°C</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs text-cyan-400 font-mono">
-            <Droplets className="w-3 h-3 text-cyan-400" />
-            <span>{weather.humidity}% RH</span>
           </div>
         </div>
-        <div className="text-[10px] text-slate-500 font-mono">
-          AccuWeather Station 49785
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <span>Phnom Penh Station</span>
+
         </div>
       </div>
 
       {/* ── Card 4: Pump System ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between">
-        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
-          <span>Pump System</span>
-          <Zap className="w-3.5 h-3.5 text-cyan-400" />
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">Pumps & Fans</span>
+
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold font-mono text-cyan-400">{runningPumps}</span>
-          <span className="text-xs text-slate-400">Pumps Active</span>
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">{runningPumps}</span>
+            <span className="text-[11px] font-medium text-slate-500">Running</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold">
+              <span className={`w-1.5 h-1.5 rounded-full ${runningPumps > 0 ? 'bg-emerald-500' : 'bg-slate-400'} animate-pulse`} />
+              {runningPumps > 0 ? 'Operational' : 'Standby'}
+            </span>
+          </div>
         </div>
-        <div className="text-[10px] text-slate-500 font-mono">
-          Motor Status Running
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <span>AHU & Circulation Pumps</span>
+
         </div>
       </div>
 
       {/* ── Card 5: Electrical System ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between">
-        <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 mb-1">
-          <span>Electrical System</span>
-          <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">Electrical System</span>
+
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold font-mono text-amber-500">{energizedElectrical}</span>
-          <span className="text-xs text-slate-400">ACB Energized</span>
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">{energizedElectrical}</span>
+            <span className="text-[11px] font-medium text-slate-500">Incomers</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-semibold ${activeAlarms > 0
+              ? 'bg-[#fef2f2] text-[#FF3523]'
+              : 'bg-[#e6edf5] text-[#001F3F]'
+              }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${activeAlarms > 0 ? 'bg-[#FF3523]' : 'bg-[#001F3F]'} animate-pulse`} />
+              {activeAlarms > 0 ? `${activeAlarms} Active Alerts` : 'Breakers Normal'}
+            </span>
+          </div>
         </div>
-        <div className="text-[10px] font-mono" style={{ color: activeAlarms > 0 ? '#ef4444' : '#48bb78' }}>
-          {activeAlarms > 0 ? `${activeAlarms} Active Alerts` : 'All Breakers Normal'}
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <span>Low Voltage Distribution</span>
+
         </div>
       </div>
 

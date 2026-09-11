@@ -28,13 +28,12 @@ interface EquipmentHealthWorkspaceProps {
 }
 
 const LINE_COLORS = [
-  '#00a4e4',
-  '#48bb78',
-  '#fa8c16',
-  '#ec4899',
-  '#8b5cf6',
-  '#06b6d4',
-  '#e52b20',
+  '#001F3F',
+  '#FF3523',
+  '#10b981',
+  '#f59e0b',
+  '#6366f1',
+  '#0ea5e9',
 ];
 
 export const EquipmentHealthWorkspace: React.FC<
@@ -197,97 +196,57 @@ export const EquipmentHealthWorkspace: React.FC<
   }, [selectedPointNames, readingsMap]);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-3 w-full select-none">
+    <div className="flex flex-col lg:flex-row gap-5 w-full select-none">
 
       {/* Left Column: Draggable Points Selection */}
-      <div className="w-full lg:w-72 shrink-0 flex flex-col gap-3">
-        <div
-          className="p-3.5"
-          style={{
-            backgroundColor: '#17181b',
-            border: '1px solid #292b30',
-          }}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h4
-              className="text-xs font-medium flex items-center gap-1.5"
-              style={{ color: '#d0d2d5' }}
-            >
-              <Move
-                className="w-3.5 h-3.5"
-                style={{ color: '#7d858c' }}
-              />
-              Draggable Points
+      <div className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
+        <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <Move className="w-3.5 h-3.5 text-[#001F3F]" />
+              Telemetry Library
             </h4>
 
-            <span
-              className="text-[10px] font-mono"
-              style={{ color: '#666a70' }}
-            >
+            <span className="text-[10px] font-medium text-slate-500">
               Drag to chart
             </span>
           </div>
 
-          <p
-            className="text-[11px] mb-3 leading-relaxed"
-            style={{ color: '#777b82' }}
-          >
-            Drag a point below into the workspace to compare
-            its telemetry.
+          <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+            Drag any point below into the comparison canvas.
           </p>
 
-          <div className="flex flex-col gap-1.5 max-h-[500px] overflow-y-auto pr-0.5">
+          <div className="flex flex-col gap-2 max-h-[500px] overflow-y-auto pr-0.5">
             {points.map((pt) => {
-              const isSelected =
-                selectedPointNames.includes(pt.point_name);
-
+              const isSelected = selectedPointNames.includes(pt.point_name);
               const reading = formatPointReading(pt);
 
               return (
                 <div
                   key={pt.point_name}
                   draggable
-                  onDragStart={(e) =>
-                    handleDragStart(e, pt.point_name)
-                  }
+                  onDragStart={(e) => handleDragStart(e, pt.point_name)}
                   onClick={() =>
                     isSelected
                       ? handleRemovePoint(pt.point_name)
                       : handleAddPoint(pt.point_name)
                   }
-                  className="p-2.5 transition-colors cursor-grab active:cursor-grabbing flex items-center justify-between"
-                  style={{
-                    backgroundColor: isSelected
-                      ? '#20282c'
-                      : '#1b1d20',
-                    border: `1px solid ${isSelected ? '#315361' : '#292c31'
-                      }`,
-                    color: isSelected
-                      ? '#e3e5e7'
-                      : '#c3c6ca',
-                  }}
+                  className={`p-2.5 rounded-md border transition-all cursor-grab active:cursor-grabbing flex items-center justify-between ${
+                    isSelected
+                      ? 'bg-[#e6edf5] border-[#001F3F]/30 text-[#001F3F] shadow-xs'
+                      : 'bg-slate-50 border-slate-100 text-slate-700 hover:bg-slate-100/80'
+                  }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <Move
-                      className="w-3.5 h-3.5 shrink-0"
-                      style={{
-                        color: isSelected
-                          ? '#6e909d'
-                          : '#5e6268',
-                      }}
-                    />
+                    <Move className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-[#001F3F]' : 'text-slate-400'}`} />
 
                     <div className="truncate">
-                      <div className="font-mono text-xs font-medium truncate">
+                      <div className="font-bold text-xs truncate">
                         {pt.point_name}
                       </div>
 
-                      <div
-                        className="text-[10px] font-mono truncate mt-0.5"
-                        style={{ color: '#73777e' }}
-                      >
-                        {pt.device_name || 'Niagara'} •{' '}
-                        {reading.displayText}
+                      <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                        {pt.device_name || 'Niagara'} • {reading.displayText}
                       </div>
                     </div>
                   </div>
@@ -295,26 +254,18 @@ export const EquipmentHealthWorkspace: React.FC<
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-
                       isSelected
                         ? handleRemovePoint(pt.point_name)
                         : handleAddPoint(pt.point_name);
                     }}
-                    className={`p-1 text-xs transition cursor-pointer ${isSelected
-                        ? 'hover:text-red-400'
-                        : 'hover:text-white'
-                      }`}
-                    style={{
-                      color: isSelected
-                        ? '#7f969e'
-                        : '#62666c',
-                    }}
+                    className={`p-1.5 rounded text-xs transition cursor-pointer ${
+                      isSelected
+                        ? 'text-[#FF3523] hover:bg-[#fef2f2]'
+                        : 'text-[#001F3F] hover:bg-white'
+                    }`}
+                    title={isSelected ? 'Remove' : 'Add to chart'}
                   >
-                    {isSelected ? (
-                      <X className="w-3.5 h-3.5" />
-                    ) : (
-                      <Plus className="w-3.5 h-3.5" />
-                    )}
+                    {isSelected ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                   </button>
                 </div>
               );
@@ -324,66 +275,41 @@ export const EquipmentHealthWorkspace: React.FC<
       </div>
 
       {/* Right Column: Multi-Point Drop Zone & Multi-Line Chart */}
-      <div className="flex-1 min-w-0 flex flex-col gap-3">
+      <div className="flex-1 min-w-0 flex flex-col gap-4">
 
         {/* Drop Zone Header */}
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className="p-3.5 transition-all"
-          style={{
-            border: `1px solid ${isDragOver ? '#00a4e4' : '#292b30'
-              }`,
-            backgroundColor: isDragOver
-              ? 'rgba(0, 164, 228, 0.06)'
-              : '#17181b',
-          }}
+          className={`bg-white border rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] transition-all ${
+            isDragOver ? 'border-[#001F3F] bg-[#e6edf5]/40 ring-2 ring-[#001F3F]/20' : 'border-slate-100/90'
+          }`}
         >
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-2.5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
 
             <div className="flex items-center gap-2">
-              <div
-                className="p-1.5"
-                style={{
-                  color: '#858b91',
-                }}
-              >
+              <div className="w-8 h-8 rounded-md bg-[#e6edf5] flex items-center justify-center text-[#001F3F]">
                 <Layers className="w-4 h-4" />
               </div>
 
               <div>
-                <h3
-                  className="text-xs font-medium"
-                  style={{ color: '#d1d3d6' }}
-                >
+                <h3 className="text-xs font-bold text-slate-800">
                   Multi-Point Telemetry Overlay
                 </h3>
 
-                <p
-                  className="text-[11px] mt-0.5"
-                  style={{ color: '#70747b' }}
-                >
+                <p className="text-xs text-slate-400 mt-0.5">
                   Comparing {selectedPointNames.length}{' '}
-                  {selectedPointNames.length === 1
-                    ? 'point'
-                    : 'points'}{' '}
-                  in real-time
+                  {selectedPointNames.length === 1 ? 'point' : 'points'} in real-time
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-
               <button
                 onClick={handleExportExcel}
                 disabled={selectedPointNames.length === 0}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs transition-colors cursor-pointer disabled:opacity-40"
-                style={{
-                  backgroundColor: '#1d1f22',
-                  border: '1px solid #30333a',
-                  color: '#92979d',
-                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors cursor-pointer disabled:opacity-40"
                 title="Export CSV"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -393,79 +319,48 @@ export const EquipmentHealthWorkspace: React.FC<
               <button
                 onClick={() => loadMultiPointData(true)}
                 disabled={isLoading}
-                className="p-1 rounded transition-colors cursor-pointer disabled:opacity-50"
-                style={{
-                  backgroundColor: '#1d1f22',
-                  border: '1px solid #30333a',
-                  color: '#858a91',
-                }}
+                className="p-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
                 title="Refresh"
               >
                 <RefreshCw
-                  className={`w-3.5 h-3.5 ${isLoading
-                      ? 'animate-spin text-cyan-400'
-                      : ''
-                    }`}
+                  className={`w-3.5 h-3.5 ${
+                    isLoading ? 'animate-spin text-[#001F3F]' : ''
+                  }`}
                 />
               </button>
             </div>
           </div>
 
           {/* Active Points Tags */}
-          <div
-            className="flex items-center gap-1.5 flex-wrap min-h-[36px] p-2"
-            style={{
-              backgroundColor: '#141619',
-              border: '1px solid #292c31',
-            }}
-          >
-            <span
-              className="text-[10px] font-mono mr-1"
-              style={{ color: '#62666c' }}
-            >
-              ACTIVE POINTS:
+          <div className="flex items-center gap-2 flex-wrap min-h-[40px] p-2.5 rounded-md bg-slate-50/80 border border-slate-100">
+            <span className="text-[10px] font-medium text-slate-500 mr-1">
+              Active Points:
             </span>
 
             {selectedPointNames.length === 0 ? (
-              <span
-                className="text-xs italic flex items-center gap-1"
-                style={{ color: '#666a70' }}
-              >
-                <HelpCircle
-                  className="w-3 h-3"
-                  style={{ color: '#777c82' }}
-                />
+              <span className="text-xs italic text-slate-400 flex items-center gap-1">
+                <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
                 Drag & drop points here to compare trend lines.
               </span>
             ) : (
               selectedPointNames.map((name, idx) => (
                 <span
                   key={name}
-                  className="flex items-center gap-1.5 px-2 py-0.5 text-xs font-mono"
-                  style={{
-                    backgroundColor: '#202328',
-                    border: '1px solid #33363c',
-                    color: '#d0d3d6',
-                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-white border border-slate-200 text-slate-800 shadow-2xs"
                 >
                   <span
-                    className="w-1.5 h-1.5 rounded-full"
+                    className="w-2 h-2 rounded-full"
                     style={{
                       backgroundColor:
-                        LINE_COLORS[
-                        idx % LINE_COLORS.length
-                        ],
+                        LINE_COLORS[idx % LINE_COLORS.length],
                     }}
                   />
 
                   <span>{name}</span>
 
                   <button
-                    onClick={() =>
-                      handleRemovePoint(name)
-                    }
-                    className="hover:text-red-400 transition ml-0.5 cursor-pointer"
-                    style={{ color: '#6d7279' }}
+                    onClick={() => handleRemovePoint(name)}
+                    className="hover:text-[#FF3523] transition ml-0.5 cursor-pointer text-slate-400"
                     title="Remove point"
                   >
                     <X className="w-3 h-3" />
@@ -477,87 +372,52 @@ export const EquipmentHealthWorkspace: React.FC<
         </div>
 
         {/* Multi-Line Chart Workspace */}
-        <div
-          className="p-4 h-[440px] relative"
-          style={{
-            backgroundColor: '#17181b',
-            border: '1px solid #292b30',
-          }}
-        >
+        <div className="bg-white border border-slate-100/90 rounded-md p-5 h-[440px] relative shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
           {isLoading && combinedChartData.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xs gap-2">
-              <RefreshCw
-                className="w-4 h-4 animate-spin"
-                style={{ color: '#00a4e4' }}
-              />
-
-              <span style={{ color: '#777b82' }}>
-                Loading multi-point comparison...
-              </span>
+            <div className="h-full flex items-center justify-center text-xs gap-2 text-slate-400">
+              <RefreshCw className="w-4 h-4 animate-spin text-[#001F3F]" />
+              <span>Loading multi-point comparison...</span>
             </div>
           ) : selectedPointNames.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-8">
-              <Layers
-                className="w-10 h-10 mb-2"
-                style={{ color: '#45494f' }}
-              />
+              <Layers className="w-10 h-10 mb-2 text-slate-300" />
 
-              <h4
-                className="text-xs font-medium mb-1"
-                style={{ color: '#aeb2b7' }}
-              >
+              <h4 className="text-xs font-bold text-slate-700 mb-1">
                 No Sensor Points Selected
               </h4>
 
-              <p
-                className="text-[11px] max-w-sm"
-                style={{ color: '#656970' }}
-              >
-                Drag any point from the left list and drop it
-                into the workspace to display the trend.
+              <p className="text-xs text-slate-400 max-w-sm">
+                Drag any point from the left list and drop it into the workspace to display the trend.
               </p>
             </div>
           ) : (
-            <ResponsiveContainer
-              width="100%"
-              height="100%"
-            >
+            <ResponsiveContainer width="100%" height="100%">
               <LineChart data={combinedChartData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="#292c31"
-                />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
 
                 <XAxis
                   dataKey="time"
-                  stroke="#555a61"
-                  tick={{
-                    fontSize: 10,
-                    fill: '#858a92',
-                  }}
+                  stroke="#94a3b8"
+                  tick={{ fontSize: 10, fill: '#64748b' }}
                   tickLine={false}
-                  axisLine={{
-                    stroke: '#34373c',
-                  }}
+                  axisLine={{ stroke: '#e2e8f0' }}
                 />
 
                 <YAxis
-                  stroke="#555a61"
-                  tick={{
-                    fontSize: 10,
-                    fill: '#858a92',
-                  }}
+                  stroke="#94a3b8"
+                  tick={{ fontSize: 10, fill: '#64748b' }}
                   tickLine={false}
                   axisLine={false}
                 />
 
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#151719',
-                    borderColor: '#34373a',
-                    borderRadius: '3px',
-                    color: '#ffffff',
-                    fontSize: '11px',
+                    backgroundColor: '#ffffff',
+                    borderColor: '#f1f5f9',
+                    borderRadius: '16px',
+                    color: '#0f172a',
+                    fontSize: '12px',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
                   }}
                 />
 
@@ -568,24 +428,18 @@ export const EquipmentHealthWorkspace: React.FC<
                   }}
                 />
 
-                {selectedPointNames.map(
-                  (name, idx) => (
-                    <Line
-                      key={name}
-                      type="monotone"
-                      dataKey={name}
-                      name={name}
-                      stroke={
-                        LINE_COLORS[
-                        idx % LINE_COLORS.length
-                        ]
-                      }
-                      strokeWidth={1.8}
-                      dot={{ r: 2 }}
-                      activeDot={{ r: 4 }}
-                    />
-                  )
-                )}
+                {selectedPointNames.map((name, idx) => (
+                  <Line
+                    key={name}
+                    type="monotone"
+                    dataKey={name}
+                    name={name}
+                    stroke={LINE_COLORS[idx % LINE_COLORS.length]}
+                    strokeWidth={2.2}
+                    dot={{ r: 2 }}
+                    activeDot={{ r: 4 }}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           )}

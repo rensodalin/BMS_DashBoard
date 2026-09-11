@@ -46,6 +46,9 @@ export async function addOrUpdateSensorPoint(point: Partial<SensorPoint>): Promi
   if (point.building_name) {
     payload.building_name = point.building_name;
   }
+  if (point.floor_name) {
+    payload.floor_name = point.floor_name;
+  }
 
   const { error } = await supabase.from('sensor_points').upsert(
     payload,
@@ -61,6 +64,10 @@ export async function addOrUpdateSensorPoint(point: Partial<SensorPoint>): Promi
     }
     if (error.message.includes('building_name') || error.code === 'PGRST204') {
       delete payload.building_name;
+      fallbackNeeded = true;
+    }
+    if (error.message.includes('floor_name') || error.code === 'PGRST204') {
+      delete payload.floor_name;
       fallbackNeeded = true;
     }
     if (fallbackNeeded) {
@@ -138,14 +145,14 @@ export async function fetchMeterReadingRange(
       ? startIso.replace(' ', 'T')
       : (startIso || '');
     if (cleanStart.length === 10) cleanStart += 'T00:00:00';
-    else if (cleanStart.length === 16) cleanStart += ':59';
+    else if (cleanStart.length === 16) cleanStart += ':00';
     else cleanStart = cleanStart.slice(0, 19);
 
     let cleanEnd = (endIso || '').includes(' ')
       ? endIso.replace(' ', 'T')
       : (endIso || '');
     if (cleanEnd.length === 10) cleanEnd += 'T23:59:59';
-    else if (cleanEnd.length === 16) cleanEnd += ':59';
+    else if (cleanEnd.length === 16) cleanEnd += ':00';
     else cleanEnd = cleanEnd.slice(0, 19);
 
     const cacheKey = `${pointName}_${cleanStart}_${cleanEnd}`;
@@ -338,7 +345,27 @@ export async function upsertTenantInvoice(invoice: Partial<TenantInvoiceDb>): Pr
     if (v !== undefined) cleanPayload[k] = v;
   }
 
-  // First attempt: send everything
+  // Strip non-UUID synthetic id (e.g. 'INV-2026-001') to avoid Postgres 22P02 uuid format error
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (cleanPayload.id && !isUuid.test(String(cleanPayload.id))) {
+    delete cleanPayload.id;
+  }
+
+  // If updating an existing invoice by invoice_number, update directly
+  if (cleanPayload.invoice_number) {
+    const { data: updatedRows, error: updateErr } = await supabase
+      .from('tenant_invoices')
+      .update(cleanPayload)
+      .eq('invoice_number', cleanPayload.invoice_number)
+      .select('id');
+
+    if (!updateErr && updatedRows && updatedRows.length > 0) {
+      console.log('✅ Supabase update success:', cleanPayload.invoice_number || cleanPayload.tenant_name);
+      return true;
+    }
+  }
+
+  // Otherwise attempt upsert
   const { error } = await supabase
     .from('tenant_invoices')
     .upsert(cleanPayload, { onConflict: 'invoice_number' });

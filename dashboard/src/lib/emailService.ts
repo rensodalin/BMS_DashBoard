@@ -68,6 +68,8 @@ export interface SendInvoiceEmailParams {
   startDate?: string;
   endDate?: string;
   customToEmail?: string;
+  customSubject?: string;
+  customBody?: string;
   telemetryRange?: {
     startReading: number | null;
     endReading: number | null;
@@ -214,6 +216,7 @@ export async function sendInvoiceEmailViaSmtp(
 
     // 3. User Requested Exact Statement Body Format
     const plainText =
+      params.customBody ||
       `Dear ${tenantName},\n\n` +
       `Please find attached your utility statement.\n\n` +
       `Account: ${accountNumber}\n` +
@@ -223,7 +226,9 @@ export async function sendInvoiceEmailViaSmtp(
       `Thank you,\n` +
       `Intersys BMS Operations Team`;
 
-    const htmlBody = `
+    const htmlBody = params.customBody
+      ? `<div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5; color: #222222; white-space: pre-wrap;">${params.customBody.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`
+      : `
       <div style="font-family: Arial, Helvetica, sans-serif; font-size: 14px; line-height: 1.5; color: #222222; margin: 0; padding: 0;">
         <p style="margin: 0 0 16px 0;">Dear ${tenantName},</p>
         <p style="margin: 0 0 20px 0;">Please find attached your utility statement.</p>
@@ -242,7 +247,7 @@ export async function sendInvoiceEmailViaSmtp(
       smtpPass: cfg.appPassword,
       fromName: cfg.senderName || 'Intersys BMS Billing',
       to,
-      subject: `Utility Bill Statement - ${invoice.invoice_number} (${tenantName})`,
+      subject: params.customSubject || `Utility Bill Statement - ${invoice.invoice_number} (${tenantName})`,
       html: htmlBody,
       text: plainText,
       attachments: [

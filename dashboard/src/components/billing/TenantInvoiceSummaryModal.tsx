@@ -136,7 +136,7 @@ export const TenantInvoiceSummaryModal: React.FC<TenantInvoiceSummaryModalProps>
         {/* Top Control Bar (Hidden when printing, matches Dashboard Theme) */}
         <div className="w-full flex items-center justify-between px-4 py-2.5 mb-2.5 bg-[#15161b] border border-[#202228] rounded-lg shadow-lg print:hidden">
           <div className="flex items-center gap-2.5 flex-wrap">
-            <span className="text-xs font-bold text-white tracking-wider uppercase flex items-center gap-1.5">
+            <span className="text-xs font-bold text-white flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#00a4e4] animate-pulse"></span>
               Utility Billing Summary
             </span>
@@ -148,7 +148,7 @@ export const TenantInvoiceSummaryModal: React.FC<TenantInvoiceSummaryModalProps>
               {customerName}
             </span>
             <span
-              className={`text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider flex items-center gap-1 ${isPaid
+              className={`text-[11px] px-2 py-0.5 rounded font-semibold flex items-center gap-1 ${isPaid
                 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                 : isOverdue
                   ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
@@ -156,7 +156,7 @@ export const TenantInvoiceSummaryModal: React.FC<TenantInvoiceSummaryModalProps>
                 }`}
             >
               {isPaid ? <CheckCircle2 className="w-3 h-3" /> : isOverdue ? <AlertTriangle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-              {invoice.status}
+              {invoice.status === 'PAID' ? 'Paid' : invoice.status === 'OVERDUE' ? 'Overdue' : 'Pending'}
             </span>
           </div>
 

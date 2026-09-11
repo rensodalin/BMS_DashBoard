@@ -1,5 +1,4 @@
 import React from 'react';
-import { DollarSign, Zap, Activity, CheckCircle2 } from 'lucide-react';
 import type { TenantInvoiceDb } from '../../types/bms';
 
 interface BillingKpiGridProps {
@@ -35,86 +34,113 @@ export const BillingKpiGrid: React.FC<BillingKpiGridProps> = ({
       : '0';
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 select-none">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 select-none mb-5">
       {/* ── Card 1: Total Billed Utility ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between">
-        <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
-          <span>Monthly Billed Utility</span>
-          <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">Monthly Utility Billed</span>
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold font-mono text-white">
-            ${totalBilled.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-          <span className="text-xs text-emerald-400 font-mono">USD</span>
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">
+              ${totalBilled.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-xs font-semibold text-[#001F3F]">USD</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="inline-block px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold">
+              ${ratePerKwh.toFixed(2)}/kWh
+            </span>
+          </div>
         </div>
-        <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center justify-between">
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
           <span>Est. ~{(totalBilled * 4100).toLocaleString('en-US', { maximumFractionDigits: 0 })} KHR</span>
-          <span className="text-emerald-400 font-mono">@ ${ratePerKwh.toFixed(2)}/kWh</span>
+
         </div>
       </div>
 
       {/* ── Card 2: Sub-Metered Consumption ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between">
-        <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
-          <span>Sub-Metered Consumption</span>
-          <Zap className="w-3.5 h-3.5 text-amber-500" />
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">Sub-Metered Total</span>
+
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold font-mono text-amber-500">
-            {totalKwh.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
-          </span>
-          <span className="text-xs text-slate-400 font-mono">kWh</span>
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">
+              {totalKwh.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            </span>
+            <span className="text-xs font-semibold text-slate-400">kWh</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="inline-block px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold">
+              {(totalKwh / 1000).toFixed(2)} MWh Recorded
+            </span>
+          </div>
         </div>
-        <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center justify-between">
-          <span>{tenantInvoices.length} Active Sub-Meters</span>
-          <span className="text-cyan-400 font-mono">{(totalKwh / 1000).toFixed(2)} MWh Load</span>
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <span>{tenantInvoices.length} Sub-Meters</span>
+
         </div>
       </div>
 
       {/* ── Card 3: Live Tenant Telemetry ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between">
-        <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 hw-pulse" />
-            <span>Live Tenant Meter</span>
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">Live Tenant Meter</span>
+
+        </div>
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">
+              {liveKwh.toFixed(2)}
+            </span>
+            <span className="text-xs font-semibold text-slate-400">kW·h</span>
           </div>
-          <Activity className="w-3.5 h-3.5 text-cyan-400" />
+          <div className="flex items-center gap-1.5 mt-2">
+            <span className="inline-block px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold">
+              Live: ${(liveKwh * ratePerKwh).toFixed(2)}
+            </span>
+          </div>
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold font-mono text-cyan-400">
-            {liveKwh.toFixed(2)}
-          </span>
-          <span className="text-xs text-slate-400 font-mono">kW·h</span>
-        </div>
-        <div className="text-[10px] text-slate-500 font-mono mt-1 flex items-center justify-between">
-          <span className="font-mono text-cyan-300">TenantIntersys_kWh</span>
-          <span className="text-emerald-400 font-mono font-semibold">
-            ${(liveKwh * ratePerKwh).toFixed(2)}
-          </span>
+        <div className="text-[10px] text-slate-400 font-mono mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between truncate">
+          <span className="truncate">TenantIntersys_kWh</span>
+
         </div>
       </div>
 
       {/* ── Card 4: Invoice Collection ── */}
-      <div className="hw-panel p-3.5 flex flex-col justify-between">
-        <div className="text-[11px] font-semibold text-slate-400 mb-1 flex items-center justify-between">
-          <span>Invoice Collection</span>
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+      <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-slate-500">Invoice Collection</span>
+
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold font-mono text-white">
-            {paidInvoicesCount}/{tenantInvoices.length}
-          </span>
-          <span className="text-xs text-slate-400 font-mono">Paid ({paidPercentage}%)</span>
+        <div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-bold font-mono text-slate-900">
+              {paidInvoicesCount}/{tenantInvoices.length}
+            </span>
+            <span className="text-xs font-semibold text-[#001F3F]">({paidPercentage}% Paid)</span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+            <span className="inline-flex items-center px-2 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold">
+              {paidInvoicesCount} Paid
+            </span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-semibold">
+              {pendingCount} Pending
+            </span>
+            {overdueCount > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded bg-[#fef2f2] text-[#FF3523] text-[10px] font-semibold">
+                {overdueCount} Overdue
+              </span>
+            )}
+          </div>
         </div>
-        <div className="text-[10px] font-mono mt-1 flex items-center gap-2">
-          <span className="text-emerald-400">{paidInvoicesCount} Paid</span>
-          <span className="text-amber-400">• {pendingCount} Pending</span>
-          <span className={overdueCount > 0 ? 'text-red-400 font-semibold' : 'text-slate-500'}>
-            • {overdueCount} Overdue
-          </span>
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <span>Automatic Reconciliation</span>
+          <span>Realtime</span>
         </div>
       </div>
     </div>
   );
-};
+}; 

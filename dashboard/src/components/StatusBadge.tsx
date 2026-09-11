@@ -13,27 +13,27 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ point }) => {
   if (nameLower.includes('smoke') || nameLower.includes('fire')) {
     if (current_value > 0 || is_alarm) {
       return (
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-red-500">
-          <span className="w-2 h-2 rounded-full bg-red-500 hw-pulse shrink-0" />
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#fef2f2] text-[#FF3523] border border-[#FF3523]/25">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#FF3523] animate-ping" />
           <span>Smoke Alarm</span>
-        </div>
+        </span>
       );
     }
     return (
-      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-[#e6edf5] text-[#001F3F] border border-[#001F3F]/25">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#001F3F]" />
         <span>Smoke Normal</span>
-      </div>
+      </span>
     );
   }
 
   // 2. HIGH TEMPERATURE / CRITICAL ALARMS
   if (is_alarm || current_value >= alert_threshold) {
     return (
-      <div className="flex items-center gap-1.5 text-xs font-semibold text-red-500">
-        <span className="w-2 h-2 rounded-full bg-red-500 hw-pulse shrink-0" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#fef2f2] text-[#FF3523] border border-[#FF3523]/25">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#FF3523] animate-pulse" />
         <span>High Alarm (&ge;{alert_threshold}°C)</span>
-      </div>
+      </span>
     );
   }
 
@@ -41,25 +41,25 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ point }) => {
   if (nameLower.includes('pump') || nameLower.includes('fan') || nameLower.includes('status')) {
     if (current_value === 1 || current_value > 0) {
       return (
-        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-200">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-[#e6edf5] text-[#001F3F] border border-[#001F3F]/25">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#001F3F]" />
           <span>Running</span>
-        </div>
+        </span>
       );
     }
     return (
-      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
         <span>Stopped</span>
-      </div>
+      </span>
     );
   }
 
   // 4. NORMAL TEMPERATURE / REGULAR SENSORS
   return (
-    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-300">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-[#e6edf5] text-[#001F3F] border border-[#001F3F]/25">
+      <span className="w-1.5 h-1.5 rounded-full bg-[#001F3F]" />
       <span>Normal</span>
-    </div>
+    </span>
   );
 };

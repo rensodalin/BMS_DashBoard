@@ -28,7 +28,7 @@ export const BillingHeaderBanner: React.FC<BillingHeaderBannerProps> = ({
           />
 
           <h1
-            className="text-lg font-medium tracking-tight"
+            className="text-lg font-medium"
             style={{ color: '#e1e3e5' }}
           >
             Utility Billing & Tenant Sub-Metering

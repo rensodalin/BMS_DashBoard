@@ -39,6 +39,7 @@ export interface SensorPointProps {
   lowLimit: number;
   highLimit: number;
   state: PointState;
+  floorName?: string;
 }
 
 export class SensorPoint {
@@ -49,6 +50,7 @@ export class SensorPoint {
   public readonly lowLimit: number;
   public readonly highLimit: number;
   public readonly state: PointState;
+  public readonly floorName?: string;
 
   constructor(props: SensorPointProps) {
     this.deviceName = props.deviceName;
@@ -60,6 +62,7 @@ export class SensorPoint {
     this.lowLimit = props.lowLimit;
     this.highLimit = props.highLimit;
     this.state = props.state;
+    this.floorName = props.floorName;
   }
 
   public get keyId(): string {
@@ -111,7 +114,8 @@ export class SensorPoint {
   public static evaluatePoint(
     deviceName: string,
     ptName: string,
-    displayStr: string
+    displayStr: string,
+    floorName?: string
   ): SensorPoint {
     const cleanPtName = ptName.replace(/\$20/g, " ").replace(/%20/g, " ");
     const displayClean = displayStr.toLowerCase();
@@ -226,6 +230,7 @@ export class SensorPoint {
       lowLimit: lowLim,
       highLimit: highLim,
       state,
+      floorName,
     });
   }
 

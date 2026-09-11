@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
 import {
   Search,
-  FileText,
-  ChevronsUpDown,
   Download,
   Calendar,
-  Trash2,
   X,
-  TrendingUp,
   RotateCcw,
   AlertTriangle,
-  Cloud,
-  Edit2,
   Send,
   Mail,
+  Plus,
+  Layers,
 } from 'lucide-react';
-import type { TenantInvoiceDb } from '../../types/bms';
+import type { TenantInvoiceDb, SensorPoint } from '../../types/bms';
 import { fetchMeterReadingRange, type MeterReadingRangeResult } from '../../lib/supabase';
+import { getInvoiceFloor } from '../../lib/floorUtils';
 
 export const toDateTimeInputValue = (val?: string): string => {
   if (!val) return '';
@@ -179,6 +176,11 @@ export const calculateIntervalConsumption = (
 
 interface TenantInvoicesTableProps {
   invoices: TenantInvoiceDb[];
+  allInvoices?: TenantInvoiceDb[];
+  points?: SensorPoint[];
+  selectedFloor?: string;
+  onSelectFloor?: (floor: string) => void;
+  availableFloors?: string[];
   searchQuery: string;
   statusFilter: 'ALL' | 'PAID' | 'PENDING' | 'OVERDUE';
   startDate: string;
@@ -188,7 +190,7 @@ interface TenantInvoicesTableProps {
   onStartDateChange: (date: string) => void;
   onEndDateChange: (date: string) => void;
   onExportInvoices: () => void;
-  onOpenAddInvoice?: () => void;
+  onOpenAddPoint?: () => void;
   onOpenEditInvoice?: (invoice: TenantInvoiceDb) => void;
   onViewInvoice?: (invoice: TenantInvoiceDb) => void;
   onSelectTenantTrend?: (invoice: TenantInvoiceDb) => void;
@@ -207,6 +209,11 @@ interface TenantInvoicesTableProps {
 
 export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
   invoices,
+  allInvoices,
+  points = [],
+  selectedFloor = 'ALL',
+  onSelectFloor,
+  availableFloors = [],
   searchQuery,
   statusFilter,
   startDate,
@@ -216,6 +223,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
   onStartDateChange,
   onEndDateChange,
   onExportInvoices,
+  onOpenAddPoint,
   onOpenEditInvoice,
   onViewInvoice,
   onSelectTenantTrend,
@@ -295,75 +303,102 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
   };
 
   return (
-    <div
-      className="rounded overflow-hidden select-none"
-      style={{
-        backgroundColor: '#15161b',
-        border: '1px solid #202228',
-      }}
-    >
+    <div className="bg-white border border-slate-100/90 rounded-md shadow-[0_2px_12px_rgba(0,0,0,0.03)] overflow-hidden select-none mb-6">
       {/* ── ROW 1: Clean Tabs (Left) + Actions & Rate (Right) ── */}
-      <div
-        className="px-4 flex flex-wrap items-center justify-between gap-3 overflow-x-auto"
-        style={{
-          borderBottom: '1px solid #202228',
-          minHeight: '44px',
-          backgroundColor: '#15161b',
-        }}
-      >
-        {/* Status Tabs */}
-        <div className="flex items-center gap-6">
+      <div className="px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white">
+        {/* Status Tabs - Rounded Rectangles */}
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => onStatusFilterChange('ALL')}
-            className={`hw-tab-btn ${statusFilter === 'ALL' ? 'active' : ''}`}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'ALL'
+                ? 'bg-[#001F3F] text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
           >
-            ALL INVOICES ({invoices.length})
+            All Invoices ({invoices.length})
           </button>
 
           <button
             onClick={() => onStatusFilterChange('PAID')}
-            className={`hw-tab-btn ${statusFilter === 'PAID' ? 'active' : ''}`}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'PAID'
+                ? 'bg-[#001F3F] text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
           >
-            PAID ({paidCount})
+            Paid ({paidCount})
           </button>
 
           <button
             onClick={() => onStatusFilterChange('PENDING')}
-            className={`hw-tab-btn ${statusFilter === 'PENDING' ? 'active' : ''}`}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'PENDING'
+                ? 'bg-[#001F3F] text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
           >
-            PENDING ({pendingCount})
+            Pending ({pendingCount})
           </button>
 
           <button
             onClick={() => onStatusFilterChange('OVERDUE')}
-            className={`hw-tab-btn flex items-center gap-1.5 ${statusFilter === 'OVERDUE' ? 'active' : ''
-              }`}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+              statusFilter === 'OVERDUE'
+                ? 'bg-[#FF3523] text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            }`}
           >
-            <span
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: '#e52b20' }}
-            />
-            <span style={{ color: overdueCount > 0 ? '#e52b20' : undefined }}>
-              OVERDUE ({overdueCount})
-            </span>
+            Overdue ({overdueCount})
           </button>
         </div>
 
-        {/* Right Toolbar: Rate Pill + Add Invoice + Export */}
-        <div className="flex items-center gap-2 py-1">
+        {/* Right Toolbar: Floor Scope Selector + Rate Pill + Add Point + Add Invoice + Export */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Floor Scope Selector */}
+          {onSelectFloor && (
+            <div
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono bg-slate-100 border border-slate-200"
+              title="Filter tenant billing meters by building floor"
+            >
+              <Layers className="w-3.5 h-3.5 text-[#001F3F] shrink-0" />
+              <span className="text-slate-500 text-[11px] font-semibold">
+                Floor:
+              </span>
+              <select
+                value={selectedFloor || 'ALL'}
+                onChange={(e) => onSelectFloor(e.target.value)}
+                className="bg-transparent text-slate-800 font-mono font-bold outline-none cursor-pointer pr-1 text-xs"
+              >
+                <option value="ALL">
+                  All Floors {allInvoices ? `(${allInvoices.length})` : ''}
+                </option>
+                {(availableFloors && availableFloors.length > 0
+                  ? availableFloors
+                  : Array.from(new Set(allInvoices ? allInvoices.map((inv) => getInvoiceFloor(inv, points)) : []))
+                ).map((floor) => {
+                  const countOnFloor = allInvoices
+                    ? allInvoices.filter((inv) => getInvoiceFloor(inv, points) === floor).length
+                    : undefined;
+                  return (
+                    <option key={floor} value={floor}>
+                      {floor} {countOnFloor !== undefined ? `(${countOnFloor})` : ''}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+
           {ratePerKwh !== undefined && onRateChange && (
             <div
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono"
-              style={{
-                backgroundColor: '#101115',
-                border: '1px solid #202228',
-              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-mono bg-slate-100 border border-slate-200"
               title="Global Utility Tariff Rate"
             >
-              <span className="text-[#64748b] text-[10px] uppercase tracking-wider font-semibold">
+              <span className="text-slate-500 text-[11px] font-semibold">
                 Rate:
               </span>
-              <span className="text-[#858d9d]">$</span>
+              <span className="text-slate-400">$</span>
               <input
                 type="number"
                 step="0.01"
@@ -373,129 +408,112 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                   const val = parseFloat(e.target.value);
                   onRateChange(isNaN(val) ? 0 : val);
                 }}
-                className="w-12 bg-transparent text-white font-mono font-semibold outline-none text-right cursor-pointer"
+                className="w-12 bg-transparent text-slate-800 font-mono font-bold outline-none text-right cursor-pointer"
                 title="Edit rate per kWh"
               />
-              <span className="text-[#64748b] text-[10px]">/kWh</span>
+              <span className="text-slate-500 text-[10px]">/kWh</span>
             </div>
           )}
 
-
+          {onOpenAddPoint && (
+            <button
+              onClick={onOpenAddPoint}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold text-white bg-[#001F3F] hover:bg-[#001428] transition cursor-pointer shadow-sm"
+              title="Add or discover oBIX sub-meter points from floor folders"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Point</span>
+            </button>
+          )}
 
           <button
             onClick={onExportInvoices}
-            className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-white transition cursor-pointer"
-            style={{
-              backgroundColor: '#101115',
-              border: '1px solid #202228',
-            }}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition cursor-pointer"
             title="Export CSV"
           >
-            <Download className="w-3 h-3 text-[#00a4e4]" />
+            <Download className="w-3.5 h-3.5 text-[#001F3F]" />
             <span>Export</span>
           </button>
 
           {onSendAllInvoices && (
             <button
               onClick={onSendAllInvoices}
-              className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-slate-300 hover:text-white transition cursor-pointer"
-              style={{
-                backgroundColor: '#101115',
-                border: '1px solid #202228',
-              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold text-white bg-[#001F3F] hover:bg-[#001428] transition cursor-pointer shadow-sm"
               title="Email every tenant their invoice in one click"
             >
-              <Send className="w-3 h-3 text-[#00a4e4]" />
+              <Send className="w-3.5 h-3.5" />
               <span>Send All</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* ── ROW 2: Honeywell Metric Badges + Global Date Range & Search ── */}
-      <div
-        className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-4"
-        style={{
-          borderBottom: '1px solid #1c1e24',
-          backgroundColor: '#121317',
-        }}
-      >
+      {/* ── ROW 2: Metric Badges + Global Date Range & Search ── */}
+      <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-4 bg-slate-50/70 border-b border-slate-100">
         {/* Left: Summary Metrics */}
         <div className="flex items-center gap-6">
           <div className="flex items-baseline gap-1.5 leading-none">
-            <span className="font-bold text-white text-base font-mono">
+            <span className="font-bold text-slate-900 text-base font-mono">
               {invoices.length}
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-              TOTAL
+            <span className="text-[11px] font-medium text-slate-500">
+              Total
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 leading-none">
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: '#48bb78' }} />
-            <span className="font-bold text-sm font-mono text-[#48bb78]">
+          <div className="flex items-baseline gap-1 leading-none">
+            <span className="font-bold text-sm font-mono text-[#001F3F]">
               {paidCount}
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-              PAID
+            <span className="text-[11px] font-medium text-slate-500">
+              Paid
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 leading-none">
-            <Cloud className="w-3.5 h-3.5" style={{ color: '#d97706' }} />
-            <span className="font-bold text-sm font-mono" style={{ color: '#d97706' }}>
+          <div className="flex items-baseline gap-1 leading-none">
+            <span className="font-bold text-sm font-mono text-amber-600">
               {pendingCount}
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-              PENDING
+            <span className="text-[11px] font-medium text-slate-500">
+              Pending
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 leading-none">
-            <AlertTriangle className="w-3.5 h-3.5" style={{ color: '#e52b20' }} />
-            <span className="font-bold text-sm font-mono" style={{ color: '#e52b20' }}>
+          <div className="flex items-baseline gap-1 leading-none">
+            <span className="font-bold text-sm font-mono text-[#FF3523]">
               {overdueCount}
             </span>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#64748b]">
-              OVERDUE
+            <span className="text-[11px] font-medium text-slate-500">
+              Overdue
             </span>
           </div>
         </div>
 
         {/* Right: Date Interval Selector & Search */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded"
-            style={{
-              backgroundColor: '#101115',
-              border: '1px solid #202228',
-            }}
-          >
-            <Calendar className="w-3.5 h-3.5 text-[#71717a]" />
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-200 shadow-2xs">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <input
               type="datetime-local"
               step="1"
               value={toDateTimeInputValue(startDate)}
               onChange={(e) => onStartDateChange(e.target.value)}
-              className="bg-transparent text-[11px] font-mono text-[#cbd5e1] outline-none cursor-pointer hover:text-white"
+              className="bg-transparent text-xs font-mono text-slate-700 outline-none cursor-pointer"
               title="Interval Start"
             />
-            <span className="text-[10px] text-[#52525b] font-mono">→</span>
+            <span className="text-xs text-slate-400 font-mono">→</span>
             <input
               type="datetime-local"
               step="1"
               value={toDateTimeInputValue(endDate)}
               onChange={(e) => onEndDateChange(e.target.value)}
-              className="bg-transparent text-[11px] font-mono text-[#cbd5e1] outline-none cursor-pointer hover:text-white"
+              className="bg-transparent text-xs font-mono text-slate-700 outline-none cursor-pointer"
               title="Interval End"
             />
 
             {getDurationText(startDate, endDate) && (
-              <span
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono text-[#94a3b8] ml-1"
-                style={{ backgroundColor: '#181920', border: '1px solid #282b36' }}
-              >
-                ⏱️ {getDurationText(startDate, endDate)}
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-[#e6edf5] text-[#001F3F] ml-1">
+                {getDurationText(startDate, endDate)}
               </span>
             )}
 
@@ -505,7 +523,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                   onStartDateChange('');
                   onEndDateChange('');
                 }}
-                className="p-0.5 text-slate-500 hover:text-white transition cursor-pointer ml-1"
+                className="p-1 text-slate-400 hover:text-slate-800 transition cursor-pointer ml-1"
                 title="Reset interval"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -516,8 +534,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
               <button
                 type="button"
                 onClick={() => onApplyDatesToAll(startDate, endDate)}
-                className="px-1.5 py-0.5 ml-1 rounded text-[10px] font-mono text-slate-300 hover:text-white transition cursor-pointer"
-                style={{ backgroundColor: '#181920', border: '1px solid #282b36' }}
+                className="px-2.5 py-0.5 ml-1 rounded text-[10px] font-semibold text-[#001F3F] bg-[#e6edf5] hover:bg-[#001F3F] hover:text-white transition cursor-pointer"
                 title="Apply date range to all tenants"
               >
                 Sync All
@@ -526,18 +543,19 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
           </div>
 
           {/* Search Box */}
-          <div className="hw-search-box">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <div className="relative flex items-center">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Search tenant or meter..."
+              className="w-52 bg-white border border-slate-200 text-slate-800 text-xs rounded-md pl-8 pr-7 py-1.5 placeholder:text-slate-400 focus:outline-none focus:border-[#001F3F]"
             />
             {searchQuery && (
               <button
                 onClick={() => onSearchChange('')}
-                className="p-1 mr-1.5 text-slate-500 hover:text-white cursor-pointer"
+                className="p-1 absolute right-2 text-slate-400 hover:text-slate-700 cursor-pointer"
                 title="Clear search"
               >
                 <X className="w-3 h-3" />
@@ -549,97 +567,65 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
 
       {/* ── Main Clean Table: Easy to Watch & Scan ── */}
       <div className="overflow-x-auto">
-        <table
-          className="w-full text-left"
-          style={{ borderCollapse: 'collapse', fontSize: '12px' }}
-        >
+        <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr
-              style={{
-                backgroundColor: '#121317',
-                borderBottom: '1px solid #202228',
-              }}
-            >
+            <tr className="bg-slate-50 border-b border-slate-200/70">
               <th className="py-3 px-3 w-8">
                 <input
                   type="checkbox"
                   checked={invoices.length > 0 && selectedInvoices.size === invoices.length}
                   onChange={toggleSelectAll}
-                  className="w-3.5 h-3.5 rounded-sm cursor-pointer"
-                  style={{
-                    backgroundColor: '#101115',
-                    borderColor: '#2d313c',
-                    accentColor: '#00a4e4',
-                  }}
+                  className="w-3.5 h-3.5 rounded cursor-pointer accent-[#001F3F]"
                   title="Select all"
                 />
               </th>
 
-              {/* TENANT & SUITE */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-[#858d9d]">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>Tenant & Suite</span>
-                  <ChevronsUpDown className="w-3 h-3 text-[#52525b]" />
-                </div>
+              {/* TENANT */}
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Tenant
               </th>
 
               {/* METER */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-[#858d9d]">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>Meter</span>
-                  <ChevronsUpDown className="w-3 h-3 text-[#52525b]" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Meter
               </th>
 
               {/* BILLING PERIOD */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-[#858d9d]">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>Billing Period</span>
-                  <ChevronsUpDown className="w-3 h-3 text-[#52525b]" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Billing Period
               </th>
 
               {/* CONSUMPTION */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-[#858d9d]">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>Consumption</span>
-                  <ChevronsUpDown className="w-3 h-3 text-[#52525b]" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Consumption
               </th>
 
               {/* STATUS */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-[#858d9d]">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>Status</span>
-                  <ChevronsUpDown className="w-3 h-3 text-[#52525b]" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Status
               </th>
 
               {/* ACTIONS */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-[#858d9d] text-right">
-                <span>Actions</span>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500 text-right">
+                Actions
               </th>
             </tr>
           </thead>
 
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {invoices.length === 0 ? (
               <tr>
-                <td
-                  colSpan={7}
-                  className="py-14 text-center text-slate-500 font-mono text-xs"
-                >
-                  No tenant invoices found for the selected filters.
+                <td colSpan={7} className="py-14 text-center text-xs text-slate-400 font-medium">
+                  {selectedFloor && selectedFloor !== 'ALL'
+                    ? `No tenant meter points found for ${selectedFloor}. Click "+ Add Point" above to configure points for ${selectedFloor}.`
+                    : 'No tenant invoices found for the selected filters.'}
                 </td>
               </tr>
             ) : (
               invoices.map((inv) => {
                 const isSelected = selectedInvoices.has(inv.invoice_number);
                 const intervalInfo = intervalDataMap[inv.invoice_number];
-                const {
-                  kwh: calcKwh,
-                  hasTelemetry,
-                } = calculateIntervalConsumption(
+                const { kwh: calcKwh } = calculateIntervalConsumption(
                   inv.kwh_reading,
                   inv.start_date || startDate,
                   inv.end_date || endDate,
@@ -652,17 +638,9 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                 return (
                   <tr
                     key={inv.invoice_number}
-                    className="transition-colors cursor-default"
-                    style={{
-                      borderBottom: '1px solid #1a1c22',
-                      backgroundColor: isSelected ? '#1b1d24' : 'transparent',
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = '#181a20';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
-                    }}
+                    className={`transition-colors ${
+                      isSelected ? 'bg-[#e6edf5]/50' : 'hover:bg-slate-50/80'
+                    }`}
                   >
                     {/* Checkbox */}
                     <td className="py-3.5 px-3 w-8">
@@ -670,12 +648,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleSelectOne(inv.invoice_number)}
-                        className="w-3.5 h-3.5 rounded-sm cursor-pointer"
-                        style={{
-                          backgroundColor: '#101115',
-                          borderColor: '#2d313c',
-                          accentColor: '#00a4e4',
-                        }}
+                        className="w-3.5 h-3.5 rounded cursor-pointer accent-[#001F3F]"
                       />
                     </td>
 
@@ -684,49 +657,39 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                       <div className="flex items-center gap-2">
                         <span
                           onClick={() => onOpenEditInvoice && onOpenEditInvoice(inv)}
-                          className="font-medium hover:underline cursor-pointer transition text-[13px]"
-                          style={{ color: '#00a4e4' }}
+                          className="font-bold text-slate-800 hover:text-[#001F3F] cursor-pointer transition text-xs"
                           title="Click to edit invoice details"
                         >
                           {inv.tenant_name}
                         </span>
 
                         {isOverdue && (
-                          <span
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold"
-                            style={{
-                              backgroundColor: 'rgba(229, 43, 32, 0.18)',
-                              color: '#ff4d4f',
-                              border: '1px solid rgba(229, 43, 32, 0.35)',
-                            }}
-                          >
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-[#fef2f2] text-[#FF3523] border border-[#FF3523]/20">
                             <AlertTriangle className="w-2.5 h-2.5" />
                             Overdue
                           </span>
                         )}
                       </div>
 
-                      <div className="text-[11px] font-mono text-[#64748b] mt-0.5 flex items-center gap-1.5">
-                        <span>{inv.invoice_number}</span>
-                        <span>•</span>
-                        <span>{inv.unit_zone}</span>
+                      <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                        {inv.invoice_number}
                       </div>
 
                       {inv.tenant_email ? (
                         <div
-                          className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5"
+                          className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5"
                           title={`Billing Email: ${inv.tenant_email}`}
                         >
-                          <Mail className="w-2.5 h-2.5 text-[#00a4e4] shrink-0" />
-                          <span className="truncate max-w-[150px] text-slate-300">{inv.tenant_email}</span>
+                          <Mail className="w-3 h-3 text-[#001F3F] shrink-0" />
+                          <span className="truncate max-w-[150px]">{inv.tenant_email}</span>
                         </div>
                       ) : (
                         <div
                           onClick={() => onOpenEditInvoice && onOpenEditInvoice(inv)}
-                          className="text-[10px] text-slate-500 font-mono italic flex items-center gap-1 mt-0.5 cursor-pointer hover:text-amber-400"
+                          className="text-[10px] text-slate-400 font-mono italic flex items-center gap-1 mt-0.5 cursor-pointer hover:text-amber-600"
                           title="Click to add tenant billing email"
                         >
-                          <Mail className="w-2.5 h-2.5 text-slate-600 shrink-0" />
+                          <Mail className="w-3 h-3 text-slate-400 shrink-0" />
                           <span>No email set</span>
                         </div>
                       )}
@@ -734,116 +697,77 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
 
                     {/* 2. METER */}
                     <td className="py-3.5 px-4 font-mono">
-                      <div
-                        onClick={() => onSelectTenantTrend && onSelectTenantTrend(inv)}
-                        className={`text-[12px] text-[#cbd5e1] font-medium ${onSelectTenantTrend ? 'cursor-pointer hover:text-[#00a4e4] transition' : ''
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          onClick={() => onSelectTenantTrend && onSelectTenantTrend(inv)}
+                          className={`text-xs text-slate-700 font-semibold ${
+                            onSelectTenantTrend ? 'cursor-pointer hover:text-[#001F3F] transition' : ''
                           }`}
-                        title="Click to view telemetry trend"
-                      >
-                        {inv.meter_name}
-                      </div>
-                      <div className="text-[10px] text-[#64748b] mt-0.5">
-                        Zone: {inv.unit_zone}
+                          title="Click to view telemetry trend"
+                        >
+                          {inv.meter_name}
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-[#e6edf5] text-[#001F3F]">
+                          {getInvoiceFloor(inv, points)}
+                        </span>
                       </div>
                     </td>
 
-                    {/* 3. BILLING PERIOD (Clean & Readable text) */}
+                    {/* 3. BILLING PERIOD */}
                     <td className="py-3.5 px-4 font-mono text-xs">
                       <div
                         onClick={() => onOpenEditInvoice && onOpenEditInvoice(inv)}
-                        className="text-[#cbd5e1] text-[11px] hover:text-[#00a4e4] cursor-pointer transition flex items-center gap-1.5"
+                        className="text-slate-700 text-xs font-medium hover:text-[#001F3F] cursor-pointer transition flex items-center gap-1.5"
                         title="Click to edit billing dates"
                       >
                         <span>{formatShortDateRange(inv.start_date || startDate, inv.end_date || endDate)}</span>
                       </div>
-                      <div className="text-[10px] text-[#64748b] mt-0.5 flex items-center gap-1">
-                        {duration ? <span>⏱️ {duration}</span> : <span>{inv.billing_period || 'Current Period'}</span>}
+                      <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        {duration ? <span>{duration}</span> : <span>{inv.billing_period || 'Current Period'}</span>}
                       </div>
                     </td>
 
-                    {/* 4. CONSUMPTION (Main kWh value + Subtle Base Reading) */}
+                    {/* 4. CONSUMPTION */}
                     <td className="py-3.5 px-4 font-mono text-xs">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white text-sm">
+                        <span className="font-bold text-slate-900 text-sm">
                           {calcKwh.toLocaleString('en-US', {
                             minimumFractionDigits: 1,
                             maximumFractionDigits: 3,
                           })}
                         </span>
-                        <span className="text-[10px] text-[#64748b]">kWh</span>
-
-                        {hasTelemetry && (
-                          <span
-                            className="px-1 py-0.2 rounded text-[8px] font-mono text-[#94a3b8]"
-                            style={{
-                              backgroundColor: '#101115',
-                              border: '1px solid #202228',
-                            }}
-                            title="Calculated from actual recorded telemetry delta"
-                          >
-                            Meter Δ
-                          </span>
-                        )}
+                        <span className="text-[10px] text-slate-400 font-semibold">kWh</span>
                       </div>
 
-                      <div className="text-[10px] text-[#64748b] mt-0.5">
+                      <div className="text-[10px] text-slate-400 mt-0.5">
                         Base: {inv.kwh_reading.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} kWh
                       </div>
                     </td>
 
-                    {/* 6. STATUS */}
+                    {/* 5. STATUS */}
                     <td className="py-3.5 px-4">
                       {inv.status === 'PAID' && (
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-[#cbd5e1]">
-                          <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: '#48bb78' }}
-                          />
-                          <span>PAID</span>
-                        </div>
+                        <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-medium bg-[#e6edf5] text-[#001F3F] border border-[#001F3F]/20">
+                          Paid
+                        </span>
                       )}
                       {inv.status === 'PENDING' && (
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-[#cbd5e1]">
-                          <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: '#fa8c16' }}
-                          />
-                          <span>PENDING</span>
-                        </div>
+                        <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/60">
+                          Pending
+                        </span>
                       )}
                       {inv.status === 'OVERDUE' && (
-                        <div
-                          className="flex items-center gap-1.5 text-xs font-semibold"
-                          style={{ color: '#e52b20' }}
-                        >
-                          <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                            style={{ backgroundColor: '#e52b20' }}
-                          />
-                          <span>OVERDUE</span>
-                        </div>
+                        <span className="inline-block px-2.5 py-0.5 rounded text-[11px] font-medium bg-[#fef2f2] text-[#FF3523] border border-[#FF3523]/30">
+                          Overdue
+                        </span>
                       )}
                     </td>
 
-                    {/* 7. ACTIONS (Summary, Trend, Edit, Delete) */}
+                    {/* 6. ACTIONS (Summary, Trend, Edit, Delete) */}
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {onSelectTenantTrend && (
-                          <button
-                            onClick={() => onSelectTenantTrend(inv)}
-                            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-slate-300 hover:text-white transition cursor-pointer"
-                            style={{
-                              backgroundColor: '#101115',
-                              border: '1px solid #202228',
-                            }}
-                            title={`View energy trend for ${inv.tenant_name}`}
-                          >
-                            <TrendingUp className="w-3 h-3 text-[#00a4e4]" />
-                            <span>Trend</span>
-                          </button>
-                        )}
-
                         <button
+                          type="button"
                           onClick={() => {
                             if (onViewInvoice) {
                               onViewInvoice(inv);
@@ -851,31 +775,37 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                               onExportInvoices();
                             }
                           }}
-                          className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-slate-300 hover:text-white transition cursor-pointer"
-                          style={{
-                            backgroundColor: '#101115',
-                            border: '1px solid #202228',
-                          }}
+                          className="px-2.5 py-1 rounded text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer border border-slate-200"
                           title={`View Invoice Summary for ${inv.invoice_number}`}
                         >
-                          <FileText className="w-3 h-3 text-[#858d9d]" />
-                          <span>Summary</span>
+                          Summary
                         </button>
 
-
+                        {onSelectTenantTrend && (
+                          <button
+                            type="button"
+                            onClick={() => onSelectTenantTrend(inv)}
+                            className="px-2.5 py-1 rounded text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer border border-slate-200"
+                            title={`View energy trend for ${inv.tenant_name}`}
+                          >
+                            Trend
+                          </button>
+                        )}
 
                         {onOpenEditInvoice && (
                           <button
+                            type="button"
                             onClick={() => onOpenEditInvoice(inv)}
-                            className="p-1 rounded text-[#64748b] hover:text-[#00a4e4] transition cursor-pointer"
-                            title={`Edit ${inv.invoice_number} dates & details`}
+                            className="px-2 py-1 rounded text-xs font-medium text-slate-500 hover:text-[#001F3F] hover:bg-slate-100 transition cursor-pointer"
+                            title={`Edit ${inv.invoice_number}`}
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            Edit
                           </button>
                         )}
 
                         {onDeleteInvoice && (
                           <button
+                            type="button"
                             onClick={() => {
                               if (
                                 window.confirm(
@@ -885,10 +815,10 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                                 onDeleteInvoice(inv);
                               }
                             }}
-                            className="p-1 rounded text-[#64748b] hover:text-[#e52b20] transition cursor-pointer"
+                            className="px-2 py-1 rounded text-xs font-medium text-slate-400 hover:text-[#FF3523] hover:bg-red-50 transition cursor-pointer"
                             title={`Delete invoice ${inv.invoice_number}`}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            Delete
                           </button>
                         )}
                       </div>

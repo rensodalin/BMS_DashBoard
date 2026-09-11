@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { SensorPoint } from '../types/bms';
-import { Star, MapPin, Bell, Info, CheckCircle2, AlertTriangle, Camera, Upload, X, Check, Building2, RotateCcw, ExternalLink, Globe } from 'lucide-react';
+import { Star, MapPin, CheckCircle2, Camera, Upload, X, Check, Building2, RotateCcw, ExternalLink, Globe } from 'lucide-react';
 import { formatPointReading } from './PointsGrid';
 import { useAuth } from '../context/AuthContext';
 import { supabase, fetchFacilityProfileDb, saveFacilityProfileDb } from '../lib/supabase';
@@ -10,6 +10,7 @@ interface LeftBuildingPanelProps {
   points: SensorPoint[];
   facilityName?: string;
   onUpdateFacilityName?: (newName: string) => void;
+  selectedFloor?: string;
 }
 
 // Client-side lightweight image resizer to keep database payloads efficient (<150KB)
@@ -50,7 +51,12 @@ const resizeImageFile = (file: File): Promise<string> => {
   });
 };
 
-export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({ points, facilityName, onUpdateFacilityName }) => {
+export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({
+  points,
+  facilityName,
+  onUpdateFacilityName,
+  selectedFloor: _selectedFloor,
+}) => {
   const { user, updateClientAccount } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -276,57 +282,46 @@ export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({ points, fa
   const totalZones = points.length;
 
   return (
-    <div className="w-full lg:w-64 shrink-0 flex flex-col gap-3 select-none lg:sticky lg:top-[88px] lg:self-start lg:max-h-[calc(100vh-100px)] lg:overflow-y-auto pr-0.5">
-      
+    <div className="w-full lg:w-64 shrink-0 flex flex-col gap-4 select-none lg:sticky lg:top-[88px] lg:self-start lg:max-h-[calc(100vh-100px)] lg:overflow-y-auto pr-0.5">
+
       {/* ── 1. Building Site Photo Card ── */}
-      <div className="hw-panel overflow-hidden relative group">
-        <div className="h-36 relative bg-slate-900 overflow-hidden">
+      <div className="shrink-0 bg-white border border-slate-100/90 rounded-md overflow-hidden shadow-[0_2px_12px_rgba(0,0,0,0.03)] group">
+        <div className="h-52 w-full relative bg-slate-100 overflow-hidden shrink-0" style={{ height: '210px', minHeight: '210px' }}>
           <img
             src={siteImage}
             alt={siteName}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center 45%' }}
             onError={(e) => {
               e.currentTarget.src = '/building_hq.jpg';
             }}
           />
-          {/* Subtle gradient scrim */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: 'linear-gradient(to top, rgba(23,24,28,0.75) 0%, transparent 60%)',
-            }}
-          />
+          {/* Soft gradient scrim */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
+
           {/* Location badge overlay */}
-          <div
-            className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium"
-            style={{
-              background: 'rgba(18, 19, 22, 0.85)',
-              backdropFilter: 'blur(4px)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              color: '#ffffff',
-            }}
-          >
-            <MapPin className="w-3 h-3 text-cyan-400 shrink-0" />
-            <span className="truncate max-w-[130px]">{siteName}</span>
+          <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium bg-white/95 backdrop-blur-md text-slate-800 shadow-xs z-10">
+            <MapPin className="w-3 h-3 text-[#001F3F] shrink-0" />
+            <span className="truncate max-w-[120px]">{siteName}</span>
           </div>
 
-          {/* Edit Site Information Pill Button */}
+          {/* Edit Site Information Button */}
           <button
             type="button"
             onClick={handleOpenEdit}
-            className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-white bg-black/60 hover:bg-[#00a4e4] border border-white/20 hover:border-[#00a4e4] backdrop-blur-xs transition cursor-pointer z-10 shadow-md"
+            className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold text-white bg-slate-900/70 hover:bg-[#001F3F] backdrop-blur-md transition cursor-pointer z-10 shadow-xs"
             title="Edit site name, location & photo"
           >
-            <Camera className="w-3 h-3 text-cyan-300" />
+            <Camera className="w-3 h-3" />
             <span>Edit</span>
           </button>
         </div>
 
         {/* Site Location & Google Maps Navigation Link */}
-        <div className="p-2 px-3 bg-[#111319] border-t border-[#20222a] flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <MapPin className="w-3 h-3 text-[#00a4e4] shrink-0" />
-            <span className="text-[11px] text-slate-300 font-medium truncate" title={siteLocation}>
+        <div className="p-3 bg-white flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <MapPin className="w-3.5 h-3.5 text-[#001F3F] shrink-0" />
+            <span className="text-xs text-slate-600 font-medium truncate" title={siteLocation}>
               {siteLocation}
             </span>
           </div>
@@ -335,7 +330,7 @@ export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({ points, fa
               href={resolvedMapUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold text-[#00a4e4] hover:text-white bg-[#00a4e4]/10 hover:bg-[#00a4e4] border border-[#00a4e4]/30 hover:border-[#00a4e4] transition-all cursor-pointer"
+              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-semibold text-[#001F3F] bg-[#e6edf5] hover:bg-[#001F3F] hover:text-white transition-all cursor-pointer shrink-0"
               title="Open location on Google Maps"
             >
               <span>Map</span>
@@ -345,180 +340,181 @@ export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({ points, fa
         </div>
       </div>
 
-      {/* ── 2. Healthy Building Rating Card ── */}
-      <div className="hw-panel p-3.5">
-        <div className="flex items-center gap-1 mb-1">
-          <span className="font-semibold text-xs text-white">Healthy Building</span>
-          <Info className="w-3 h-3 text-slate-400" />
+      {/* ── 2. Healthy Building Rating Card (Intersys Donut Format) ── */}
+      <div className="shrink-0 bg-white border border-slate-100 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col items-center text-center">
+        <div className="w-full flex items-center justify-between mb-3">
+          <span className="font-bold text-xs text-slate-800">Building Health</span>
+          <span className="text-[10px] font-bold text-slate-500">{totalZones} Points</span>
         </div>
 
-        <div className="text-[11px] text-slate-400 mb-2">
-          Overall Rating (Total {totalZones} zones)
-        </div>
-
-        {/* Large Rating Number & Stars */}
-        <div className="flex items-center gap-2 mb-3">
-          <span className="font-bold text-white text-3xl leading-none">
-            {buildingRating}
-          </span>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-0.5">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Star
-                  key={s}
-                  className="w-3 h-3"
-                  style={{
-                    color: s <= buildingRating ? '#fa8c16' : '#4a4e5a',
-                    fill: s <= buildingRating ? '#fa8c16' : 'none',
-                  }}
-                />
-              ))}
-            </div>
-            <span className="text-[11px] font-medium text-slate-400">{ratingLabel}</span>
+        {/* Intersys Style SVG Donut Chart */}
+        <div className="relative w-28 h-28 my-1 flex items-center justify-center">
+          <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+            {/* Background circle track */}
+            <circle
+              cx="50"
+              cy="50"
+              r="40"
+              className="stroke-slate-100"
+              strokeWidth="10"
+              fill="transparent"
+            />
+            {/* Intersys Navy Healthy Arc */}
+            <circle
+              cx="50"
+              cy="50"
+              r="40"
+              stroke="#001F3F"
+              strokeWidth="10"
+              strokeDasharray={251.2}
+              strokeDashoffset={251.2 * (1 - (totalZones > 0 ? (totalZones - activeAlarmsCount) / totalZones : 1))}
+              strokeLinecap="round"
+              fill="transparent"
+              className="transition-all duration-700 ease-out"
+            />
+            {/* Intersys Red Alarm Arc (if active alarms exist) */}
+            {activeAlarmsCount > 0 && (
+              <circle
+                cx="50"
+                cy="50"
+                r="40"
+                stroke="#FF3523"
+                strokeWidth="10"
+                strokeDasharray={251.2}
+                strokeDashoffset={251.2 * (1 - activeAlarmsCount / totalZones)}
+                strokeLinecap="round"
+                fill="transparent"
+                className="transition-all duration-700 ease-out"
+              />
+            )}
+          </svg>
+          {/* Donut Center Metrics */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="font-extrabold font-mono text-slate-900 text-xl leading-none">
+              {totalZones > 0 ? Math.round(((totalZones - activeAlarmsCount) / totalZones) * 100) : 100}%
+            </span>
+            <span className="text-[9px] font-bold text-slate-500 mt-1">
+              Healthy
+            </span>
           </div>
         </div>
 
+        {/* Stars & Rating Label */}
+        <div className="flex items-center gap-1 mt-2">
+          {[1, 2, 3, 4, 5].map((s) => (
+            <Star
+              key={s}
+              className="w-3.5 h-3.5"
+              style={{
+                color: s <= buildingRating ? '#f59e0b' : '#e2e8f0',
+                fill: s <= buildingRating ? '#f59e0b' : 'none',
+              }}
+            />
+          ))}
+          <span className="text-xs font-bold text-slate-700 ml-1">{ratingLabel}</span>
+        </div>
+
         {/* Intelligent Optimization Badge */}
-        <div
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider"
-          style={{
-            backgroundColor: '#16181c',
-            border: '1px solid #2d3038',
-            color: '#d1d5db',
-          }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-          <span>INTELLIGENT OPTIMIZATION ON</span>
+        <div className="mt-3 w-full py-1.5 px-2 rounded-md bg-[#e6edf5] text-[#001F3F] text-[10px] font-bold flex items-center justify-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#001F3F] animate-pulse" />
+          <span>Niagara Optimization Active</span>
         </div>
       </div>
 
       {/* ── 3. Alarm Summary Card ── */}
-      <div className="hw-panel p-3.5">
-        <div className="text-xs font-semibold text-white mb-2.5">
-          Alarm
+      <div className="shrink-0 bg-white border border-slate-100 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)]">
+        <div className="flex items-center justify-between text-xs font-bold text-slate-800 mb-3">
+          <span>Active Alarms</span>
+          <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
+            activeAlarmsCount > 0 ? 'bg-[#fef2f2] text-[#FF3523]' : 'bg-[#e6edf5] text-[#001F3F]'
+          }`}>
+            {activeAlarmsCount} Active
+          </span>
         </div>
 
         {/* Alarm 3-Column Stats Grid */}
-        <div className="grid grid-cols-3 gap-2 pb-3 mb-3" style={{ borderBottom: '1px solid #282a32' }}>
-          
+        <div className="grid grid-cols-3 gap-2 pb-3 mb-3 border-b border-slate-100 text-center">
           {/* Total reported */}
-          <div className="flex flex-col">
-            <Bell className="w-3.5 h-3.5 text-cyan-400 mb-1" />
-            <span className="font-bold font-mono text-white text-xl leading-tight">
+          <div className="flex flex-col items-center">
+            <span className="font-extrabold font-mono text-slate-900 text-lg leading-tight">
               {totalZones}
             </span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase leading-tight mt-0.5">
-              REPORTED<br />HIGH ALARM
+            <span className="text-[9px] font-bold text-slate-500 leading-tight mt-0.5">
+              Total
             </span>
           </div>
 
           {/* Active alarms */}
-          <div className="flex flex-col">
-            <Bell className={`w-3.5 h-3.5 mb-1 ${activeAlarmsCount > 0 ? 'text-red-500' : 'text-slate-500'}`} />
-            <span className={`font-bold font-mono text-xl leading-tight ${activeAlarmsCount > 0 ? 'text-red-500' : 'text-slate-400'}`}>
+          <div className="flex flex-col items-center">
+            <span className={`font-extrabold font-mono text-lg leading-tight ${activeAlarmsCount > 0 ? 'text-[#FF3523]' : 'text-slate-800'}`}>
               {activeAlarmsCount}
             </span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase leading-tight mt-0.5">
-              ACTIVE<br />HIGH ALARM
+            <span className="text-[9px] font-bold text-slate-500 leading-tight mt-0.5">
+              Alarms
             </span>
           </div>
 
-          {/* Severity breakdown */}
-          <div className="flex flex-col justify-between">
-            <div className="flex items-center gap-1 mb-1">
-              <AlertTriangle className="w-3 h-3 text-amber-500" />
-              <span className="font-bold font-mono text-white text-xs">{Math.ceil(activeAlarmsCount * 0.35)}</span>
-              <span className="text-[8px] font-bold text-slate-400 uppercase">MEDIUM</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <AlertTriangle className="w-3 h-3 text-emerald-400" />
-              <span className="font-bold font-mono text-white text-xs">{Math.ceil(activeAlarmsCount * 0.65)}</span>
-              <span className="text-[8px] font-bold text-slate-400 uppercase">LOW</span>
-            </div>
+          {/* Warning state */}
+          <div className="flex flex-col items-center">
+            <span className="font-extrabold font-mono text-slate-800 text-lg leading-tight">
+              {Math.ceil(activeAlarmsCount * 0.35)}
+            </span>
+            <span className="text-[9px] font-bold text-slate-500 leading-tight mt-0.5">
+              Warnings
+            </span>
           </div>
-
         </div>
 
         {/* ── Active High Alarm Feed ── */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-              <Bell className={`w-3.5 h-3.5 ${activeAlarmsCount > 0 ? 'text-red-500' : 'text-slate-500'}`} />
-              <span>Active High Alarm</span>
-            </div>
-            <span className="font-mono text-xs text-slate-400 font-bold">
-              {String(activeAlarmsCount).padStart(2, '0')}
-            </span>
-          </div>
-
-          {/* Alarm Items List */}
-          <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-0.5">
-            {activeAlarmsList.length > 0 ? (
-              activeAlarmsList.map((pt) => {
-                const reading = formatPointReading(pt);
-                return (
-                  <div
-                    key={pt.point_name}
-                    className="p-2.5 rounded text-xs"
-                    style={{
-                      backgroundColor: '#16181c',
-                      border: '1px solid #282a32',
-                    }}
-                  >
-                    <div className="font-medium font-mono text-white text-xs mb-0.5">
-                      {pt.point_name}
-                    </div>
-                    <div className="text-[11px] text-slate-400">
-                      {pt.device_name || 'ObixTest'} — <span className={`font-medium ${reading.statusClass}`}>{reading.displayText}</span>
-                    </div>
-                    <div className="text-[10px] text-slate-500 mt-1 font-mono">
-                      {pt.updated_at ? new Date(pt.updated_at).toLocaleTimeString() : 'Live'}
-                    </div>
+        <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-0.5">
+          {activeAlarmsList.length > 0 ? (
+            activeAlarmsList.map((pt) => {
+              const reading = formatPointReading(pt);
+              return (
+                <div
+                  key={pt.point_name}
+                  className="p-2.5 rounded bg-slate-50 border border-slate-100 text-xs"
+                >
+                  <div className="font-bold font-mono text-slate-800 text-xs mb-0.5">
+                    {pt.point_name}
                   </div>
-                );
-              })
-            ) : (
-              <div
-                className="p-3 rounded text-xs text-center flex items-center justify-center gap-1.5"
-                style={{
-                  backgroundColor: '#16181c',
-                  border: '1px solid #282a32',
-                  color: '#9ca3af',
-                }}
-              >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                <span>All Points Normal</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-      </div>
-
-      {/* ── 4. Edit Site & Company Information Modal (Rendered via Portal to avoid stacking context clipping) ── */}
-      {isEditModalOpen && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md select-none animate-in fade-in duration-200">
-          <div
-            className="w-full max-w-lg rounded-2xl p-6 relative text-left shadow-2xl border border-[#262833] animate-in zoom-in-95 duration-150"
-            style={{ backgroundColor: '#13151b' }}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-4 mb-5 border-b border-[#20222a]">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#0080c8] to-[#00a4e4] p-0.5 shadow-md shadow-sky-950/50 flex items-center justify-center">
-                  <div className="w-full h-full rounded-[10px] bg-[#11131a] flex items-center justify-center text-white">
-                    <Building2 className="w-4 h-4 text-[#00a4e4]" />
+                  <div className="text-[11px] text-slate-500">
+                    {pt.device_name || 'ObixTest'} — <span className="font-bold text-[#FF3523]">{reading.displayText}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1 font-mono">
+                    {pt.updated_at ? new Date(pt.updated_at).toLocaleTimeString() : 'Live'}
                   </div>
                 </div>
+              );
+            })
+          ) : (
+            <div className="p-3 rounded bg-blue-50/60 border border-blue-100 text-xs text-[#001F3F] font-semibold text-center flex items-center justify-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-[#001F3F]" />
+              <span>All Points Operating Normally</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 4. Edit Site & Company Information Modal ── */}
+      {isEditModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs select-none animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-md p-6 relative text-left shadow-2xl border border-slate-100 bg-white animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-md bg-[#e6edf5] flex items-center justify-center text-[#001F3F]">
+                  <Building2 className="w-5 h-5" />
+                </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white tracking-tight">Edit Site & Company Profile</h3>
-                  <p className="text-[11px] text-slate-400">Customize facility name and company banner photo</p>
+                  <h3 className="text-base font-bold text-slate-900">Edit Site & Company Profile</h3>
+                  <p className="text-xs text-slate-500">Customize facility name and company banner photo</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsEditModalOpen(false)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-[#1f222b] transition cursor-pointer"
+                className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition cursor-pointer"
                 title="Close modal"
               >
                 <X className="w-4 h-4" />
@@ -528,13 +524,13 @@ export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({ points, fa
             <form onSubmit={handleSaveSite} className="space-y-4">
               {/* Image Preview & Upload Controls */}
               <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
                   <span>Company / Facility Photo</span>
-                  <span className="text-[10px] text-slate-500 font-normal">Auto-optimized for performance</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Auto-optimized for performance</span>
                 </label>
-                
+
                 {/* Image Card Preview */}
-                <div className="relative h-44 rounded-xl overflow-hidden border border-[#282a35] bg-black/70 mb-3 group shadow-inner">
+                <div className="relative h-44 rounded-md overflow-hidden border border-slate-200 bg-slate-100 mb-3 group shadow-inner">
                   <img
                     src={previewImage}
                     alt="Preview"
@@ -543,22 +539,22 @@ export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({ points, fa
                       e.currentTarget.src = '/building_hq.jpg';
                     }}
                   />
-                  
+
                   {/* Scrim overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
 
                   {/* Top preview badge */}
-                  <div className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded text-[10px] font-medium bg-black/60 border border-white/10 text-slate-300 backdrop-blur-xs flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-[#00a4e4]" />
+                  <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded text-[10px] font-semibold bg-white/90 text-slate-800 shadow-xs flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-[#001F3F]" />
                     <span>{inputName || activeName}</span>
                   </div>
 
                   {/* Hover action overlay */}
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3.5 py-2 rounded-lg bg-[#00a4e4] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-lg hover:bg-[#0092cc] transition"
+                      className="px-4 py-2 rounded-md bg-[#001F3F] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-md hover:bg-[#001428] transition"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Select New Photo</span>
@@ -578,16 +574,16 @@ export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({ points, fa
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 py-2.5 px-3 rounded-lg text-xs font-semibold text-white bg-[#1c1e27] hover:bg-[#252834] border border-[#2d303d] transition cursor-pointer flex items-center justify-center gap-2 hover:border-[#00a4e4]/50"
+                    className="flex-1 py-2 px-3 rounded-md text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition cursor-pointer flex items-center justify-center gap-2"
                   >
-                    <Upload className="w-3.5 h-3.5 text-[#00a4e4]" />
+                    <Upload className="w-3.5 h-3.5 text-[#001F3F]" />
                     <span>Upload Company Photo</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleResetImage}
-                    className="py-2.5 px-3.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 bg-[#1c1e27] hover:bg-[#252834] border border-[#2d303d] transition cursor-pointer flex items-center gap-1.5"
+                    className="py-2 px-3.5 rounded-md text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition cursor-pointer flex items-center gap-1.5"
                     title="Reset to default building photo"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -598,87 +594,80 @@ export const LeftBuildingPanel: React.FC<LeftBuildingPanelProps> = ({ points, fa
 
               {/* Site / Company Name Input */}
               <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                   Site / Company Name
                 </label>
                 <div className="relative">
-                  <Building2 className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                  <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="text"
                     value={inputName}
                     onChange={(e) => setInputName(e.target.value)}
-                    placeholder="e.g. nita company, KOI Facility, Station HQ"
-                    className="w-full bg-[#0d0e12] border border-[#282a35] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-9 pr-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors font-sans"
+                    placeholder="e.g. Intersys Solutions Facility, Station HQ"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#001F3F] text-slate-800 text-xs rounded-md pl-9 pr-3.5 py-2.5 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-colors"
                     required
                   />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  This name is displayed on your left building card, status badge, and reports.
-                </p>
               </div>
 
               {/* Company Location / Physical Address */}
               <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center justify-between">
-                  <span>Company Location / Physical Address</span>
-                  <span className="text-[10px] text-slate-500 font-normal">Displayed on card</span>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Company Location / Physical Address
                 </label>
                 <div className="relative">
-                  <MapPin className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                  <MapPin className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="text"
                     value={inputLocation}
                     onChange={(e) => setInputLocation(e.target.value)}
                     placeholder="e.g. Russian Federation Blvd, Toul Kork, Phnom Penh"
-                    className="w-full bg-[#0d0e12] border border-[#282a35] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-9 pr-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors font-sans"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#001F3F] text-slate-800 text-xs rounded-md pl-9 pr-3.5 py-2.5 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-colors"
                   />
                 </div>
               </div>
 
               {/* Google Maps Link or GPS Coordinates */}
               <div>
-                <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
-                    <Globe className="w-3.5 h-3.5 text-[#00a4e4]" /> Google Maps Link or Coordinates
+                    <Globe className="w-3.5 h-3.5 text-[#001F3F]" /> Google Maps Link or Coordinates
                   </span>
-                  <span className="text-[10px] text-slate-500 font-normal">Direct map navigation</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Direct map navigation</span>
                 </label>
                 <div className="relative">
-                  <Globe className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                  <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                   <input
                     type="text"
                     value={inputMapUrl}
                     onChange={(e) => setInputMapUrl(e.target.value)}
                     placeholder="e.g. https://maps.app.goo.gl/... or 11.5564, 104.9282"
-                    className="w-full bg-[#0d0e12] border border-[#282a35] focus:border-[#00a4e4] text-white text-xs rounded-lg pl-9 pr-3.5 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors font-mono text-[11px]"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#001F3F] text-slate-800 text-xs rounded-md pl-9 pr-3.5 py-2.5 placeholder:text-slate-400 focus:outline-none focus:bg-white transition-colors font-mono text-[11px]"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Paste your Google Maps share link or coordinates. If left empty, it will automatically search by address on Google Maps.
-                </p>
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-4 border-t border-[#20222a] flex items-center justify-between gap-2.5">
-                <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2.5">
+                <div className="flex items-center gap-1.5 text-[11px] text-[#001F3F] font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-[#001F3F] animate-pulse" />
                   <span>Cloud DB Synced</span>
                 </div>
                 <div className="flex items-center gap-2.5">
                   <button
                     type="button"
                     onClick={() => setIsEditModalOpen(false)}
-                    className="px-4 py-2.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-[#1a1c24] transition cursor-pointer"
+                    className="px-4 py-2 rounded-md text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={isSaving}
-                    className="px-5 py-2.5 rounded-lg text-xs font-semibold text-white bg-[#00a4e4] hover:bg-[#0092cc] active:bg-[#0081b5] transition cursor-pointer flex items-center gap-2 shadow-md shadow-[#00a4e4]/20 disabled:opacity-50"
+                    className="px-5 py-2 rounded-md text-xs font-bold text-white bg-[#001F3F] hover:bg-[#001428] active:bg-[#001428] transition cursor-pointer flex items-center gap-2 shadow-sm shadow-[#001F3F]/20 disabled:opacity-50"
                   >
                     <Check className="w-3.5 h-3.5" />
-                    <span>{isSaving ? 'Saving to Database...' : 'Save Site Information'}</span>
+                    <span>{isSaving ? 'Saving...' : 'Save Site Information'}</span>
                   </button>
                 </div>
               </div>

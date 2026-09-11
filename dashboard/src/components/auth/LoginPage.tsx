@@ -29,29 +29,17 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div
-      className="min-h-screen w-full flex flex-col items-center justify-center p-4 select-none relative overflow-hidden"
-      style={{
-        backgroundColor: '#0a0b0e',
-        backgroundImage: 'radial-gradient(circle at 50% 25%, rgba(0, 164, 228, 0.08), transparent 60%)',
-      }}
-    >
-      {/* Background industrial grid accent */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-10"
-        style={{
-          backgroundImage:
-            'linear-gradient(#202228 1px, transparent 1px), linear-gradient(to right, #202228 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-        }}
-      />
+    <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 select-none relative bg-[#f3f5f9]">
+      {/* Background soft ambient orbs */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#001F3F]/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/3 w-[400px] h-[400px] bg-[#FF3523]/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-[420px] relative z-10">
         {/* Card Container */}
-        <div className="bg-[#15161b] border border-[#202228] rounded-xl shadow-2xl shadow-black p-7 sm:p-8">
+        <div className="bg-white border border-slate-100 rounded-md shadow-xl shadow-slate-200/50 p-8 sm:p-10">
           {/* Header Brand */}
-          <div className="text-center mb-6">
-            <div className="flex items-center justify-center mb-3">
+          <div className="text-center mb-7">
+            <div className="flex items-center justify-center mb-4">
               <img
                 src={INTERSYS_LOGO_BASE64}
                 alt="Intersys Solutions"
@@ -62,21 +50,19 @@ export const LoginPage: React.FC = () => {
               />
             </div>
 
-            <div className="flex items-center justify-center gap-2 mb-1">
-              <h1 className="text-base font-semibold text-white tracking-wide">
-                Remote Building Manager
-              </h1>
-            </div>
-
-
-
+            <h1 className="text-xl font-bold text-slate-800 mb-1">
+              Welcome Back
+            </h1>
+            <p className="text-xs text-slate-500 font-medium">
+              Sign in to manage building telemetry & billing
+            </p>
           </div>
 
           {/* Error Alert */}
           {errorMessage && (
-            <div className="mb-4 p-3 rounded bg-red-500/10 border border-red-500/25 flex items-start gap-2.5 text-xs text-red-400">
+            <div className="mb-5 p-3.5 rounded-md bg-[#fef2f2] border border-[#FF3523]/20 flex items-start gap-2.5 text-xs text-[#FF3523]">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span className="leading-snug">{errorMessage}</span>
+              <span className="leading-snug font-medium">{errorMessage}</span>
             </div>
           )}
 
@@ -84,18 +70,18 @@ export const LoginPage: React.FC = () => {
           <form onSubmit={handleSubmit} className="space-y-4 text-left">
             {/* Username / Email */}
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
                 Admin Username or Email
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   placeholder="admin@intersys.com"
                   autoComplete="username"
-                  className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-md pl-9 pr-3 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-[#001F3F] text-slate-800 text-xs rounded-md pl-10 pr-3 py-2.5 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#001F3F]/20 focus:bg-white transition"
                   required
                   autoFocus
                 />
@@ -104,26 +90,24 @@ export const LoginPage: React.FC = () => {
 
             {/* Password */}
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-medium text-slate-300">
-                  Password
-                </label>
-              </div>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                Password
+              </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full bg-[#0e0f13] border border-[#202228] focus:border-[#00a4e4] text-white text-xs rounded-md pl-9 pr-10 py-2.5 placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-[#00a4e4]/30 transition-colors"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-[#001F3F] text-slate-800 text-xs rounded-md pl-10 pr-10 py-2.5 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#001F3F]/20 focus:bg-white transition"
                   required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 transition cursor-pointer"
+                  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 transition cursor-pointer"
                   tabIndex={-1}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
@@ -136,7 +120,7 @@ export const LoginPage: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full mt-2 flex items-center justify-center gap-2 py-2.5 px-4 rounded-md text-xs font-semibold text-white bg-[#00a4e4] hover:bg-[#0092cc] active:bg-[#0081b5] transition cursor-pointer disabled:opacity-60 shadow-md shadow-[#00a4e4]/10"
+              className="w-full mt-3 flex items-center justify-center gap-2 py-3 px-4 rounded-md text-xs font-bold text-white bg-[#001F3F] hover:bg-[#001428] active:bg-[#001020] transition cursor-pointer disabled:opacity-60 shadow-md shadow-[#001F3F]/20"
             >
               {isSubmitting ? (
                 <>
@@ -145,18 +129,17 @@ export const LoginPage: React.FC = () => {
                 </>
               ) : (
                 <>
-                  <span>Sign In as Administrator</span>
+                  <span>Sign In to Dashboard</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
-
         </div>
 
         {/* Security Footer */}
-        <div className="text-center mt-4 text-[10px] text-slate-600 font-mono">
-          <span>Protected by 256-bit TLS • Authorized Access Only</span>
+        <div className="text-center mt-5 text-xs text-slate-400 font-medium">
+          <span>Protected by 256-bit TLS • Enterprise Niagara BMS</span>
         </div>
       </div>
     </div>

@@ -1,8 +1,8 @@
 import React from 'react';
 import type { SensorPoint } from '../types/bms';
 import { StatusBadge } from './StatusBadge';
-import { TrendingUp, Trash2, ChevronsUpDown, HardDrive, Cloud } from 'lucide-react';
 import { formatPointReading } from './PointsGrid';
+import { detectFloorFromPoint } from '../lib/floorUtils';
 
 interface PointsTableProps {
   points: SensorPoint[];
@@ -16,76 +16,39 @@ export const PointsTable: React.FC<PointsTableProps> = ({
   onDeletePoint,
 }) => {
   return (
-    <div
-      className="rounded overflow-hidden mb-6 select-none"
-      style={{
-        backgroundColor: '#202227',
-        border: '1px solid #2d3038',
-      }}
-    >
+    <div className="bg-white border border-slate-200/80 rounded-md shadow-xs overflow-hidden mb-6 select-none">
       <div className="overflow-x-auto">
-        <table className="w-full text-left" style={{ borderCollapse: 'collapse', fontSize: '13px' }}>
+        <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr style={{ borderBottom: '1px solid #2d3038', backgroundColor: '#1b1d22' }}>
-              {/* NAME */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-slate-400">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>NAME</span>
-                  <ChevronsUpDown className="w-3 h-3 text-slate-500" />
-                </div>
+            <tr className="bg-slate-50 border-b border-slate-200/70">
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Point Name
               </th>
-
-              {/* CONTROLLER / DEVICE */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-slate-400">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>CONTROLLER / DEVICE</span>
-                  <ChevronsUpDown className="w-3 h-3 text-slate-500" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Floor & Device
               </th>
-
-              {/* LIVE VALUE */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-slate-400">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>LIVE VALUE</span>
-                  <ChevronsUpDown className="w-3 h-3 text-slate-500" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Live Reading
               </th>
-
-              {/* ACTIVE HIGH ALARM */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-slate-400">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>ACTIVE HIGH ALARM</span>
-                  <ChevronsUpDown className="w-3 h-3 text-slate-500" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Alarms
               </th>
-
-              {/* STATUS */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-slate-400">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>STATUS</span>
-                  <ChevronsUpDown className="w-3 h-3 text-slate-500" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Status
               </th>
-
-              {/* LAST UPDATED */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-slate-400">
-                <div className="flex items-center gap-1 cursor-pointer hover:text-white transition">
-                  <span>LAST UPDATED</span>
-                  <ChevronsUpDown className="w-3 h-3 text-slate-500" />
-                </div>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500">
+                Last Sync
               </th>
-
-              {/* ACTIONS */}
-              <th className="py-3 px-4 font-bold text-[11px] uppercase tracking-wider text-slate-400 text-right">
-                <span>ACTIONS</span>
+              <th className="py-3 px-4 font-semibold text-[11px] text-slate-500 text-right">
+                Actions
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100">
             {points.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-14 text-center text-slate-500 font-mono text-xs">
-                  No monitored sensor points found.
+                <td colSpan={7} className="py-12 text-center text-slate-400 font-medium text-xs">
+                  No monitored sensor points found in this scope.
                 </td>
               </tr>
             ) : (
@@ -96,101 +59,79 @@ export const PointsTable: React.FC<PointsTableProps> = ({
                 return (
                   <tr
                     key={pt.point_name}
-                    className="hover:bg-[#262930] transition-colors"
-                    style={{
-                      borderBottom: '1px solid #282a31',
-                    }}
+                    className="hover:bg-slate-50/70 transition-colors"
                   >
-                    {/* NAME Column with Cyan link or Red VAV Box 3 Alert Pill */}
-                    <td className="py-3.5 px-4">
-                      {isAlarm ? (
-                        /* Alarm pill matching exact reference screenshot [ VAV Box 3 ] 🔴 ☁ */
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            onClick={() => onSelectPointTrend(pt)}
-                            className="px-2 py-0.5 rounded text-xs font-semibold text-white cursor-pointer transition shadow-sm flex items-center gap-1"
-                            style={{ backgroundColor: '#e52b20' }}
-                            title="View alarm telemetry"
-                          >
-                            <span>{pt.point_name}</span>
-                          </button>
-                          <span className="p-0.5 rounded text-red-500" title="Active Alert">
-                            <Cloud className="w-3.5 h-3.5 fill-red-500/20" />
-                          </span>
-                        </div>
-                      ) : (
-                        /* Normal cyan text link matching reference screenshot */
-                        <span
-                          onClick={() => onSelectPointTrend(pt)}
-                          className="font-medium cursor-pointer hover:underline"
-                          style={{
-                            color: '#00a4e4',
-                            fontSize: '13px',
-                          }}
-                        >
-                          {pt.point_name}
-                        </span>
-                      )}
+                    {/* Point Name */}
+                    <td className="py-3 px-4">
+                      <button
+                        type="button"
+                        onClick={() => onSelectPointTrend(pt)}
+                        className="text-left font-medium text-slate-900 hover:text-[#001F3F] hover:underline cursor-pointer transition flex items-center gap-1.5"
+                      >
+                        {isAlarm && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#FF3523] shrink-0" />
+                        )}
+                        <span>{pt.point_name}</span>
+                      </button>
                     </td>
 
-                    {/* Controller / Device */}
-                    <td className="py-3.5 px-4 text-slate-300">
-                      <div className="flex items-center gap-1.5 text-xs text-slate-300">
-                        <HardDrive className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                        <span>{pt.device_name || 'Niagara Controller'}</span>
+                    {/* Controller / Device & Floor */}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-[#e6edf5] text-[#001F3F] shrink-0">
+                          {detectFloorFromPoint(pt)}
+                        </span>
+                        <span className="text-slate-600 truncate font-normal">
+                          {pt.device_name || 'Niagara Controller'}
+                        </span>
                       </div>
                     </td>
 
                     {/* Live Telemetry Value */}
-                    <td className="py-3.5 px-4 font-mono font-bold text-xs">
-                      <span className={reading.statusClass}>
+                    <td className="py-3 px-4 font-mono font-medium text-xs">
+                      <span className={isAlarm ? 'text-[#FF3523] font-bold' : 'text-slate-900'}>
                         {reading.displayText}{reading.isTemp ? ' °C' : ''}
                       </span>
                     </td>
 
                     {/* Active High Alarm Count */}
-                    <td className="py-3.5 px-4">
-                      <span
-                        className="font-mono text-xs font-medium"
-                        style={{
-                          color: isAlarm ? '#ef4444' : '#8b929e',
-                        }}
-                      >
-                        {isAlarm ? '1' : '0'}
-                      </span>
+                    <td className="py-3 px-4">
+                      {isAlarm ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#fef2f2] text-[#FF3523]">
+                          1 Alert
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-mono text-xs">0</span>
+                      )}
                     </td>
 
                     {/* Status Badge */}
-                    <td className="py-3.5 px-4">
+                    <td className="py-3 px-4">
                       <StatusBadge point={pt} />
                     </td>
 
                     {/* Last Updated Timestamp */}
-                    <td className="py-3.5 px-4 font-mono text-slate-400 text-xs">
+                    <td className="py-3 px-4 font-mono text-slate-500 text-xs">
                       {pt.updated_at ? new Date(pt.updated_at).toLocaleTimeString() : 'Live'}
                     </td>
 
-                    {/* Action Buttons */}
-                    <td className="py-3.5 px-4">
+                    {/* Actions */}
+                    <td className="py-3 px-4">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
+                          type="button"
                           onClick={() => onSelectPointTrend(pt)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium text-slate-300 hover:text-white transition cursor-pointer"
-                          style={{
-                            backgroundColor: '#17181c',
-                            border: '1px solid #2d3038',
-                          }}
-                          title="View Live Trend"
+                          className="px-2.5 py-1 rounded text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer border border-slate-200"
                         >
-                          <TrendingUp className="w-3 h-3 text-cyan-400" />
-                          <span>Trend</span>
+                          Trend
                         </button>
                         <button
+                          type="button"
                           onClick={() => onDeletePoint(pt.point_name)}
-                          className="p-1 rounded text-slate-500 hover:text-red-400 transition cursor-pointer"
+                          className="px-2 py-1 rounded text-xs font-medium text-slate-400 hover:text-[#FF3523] hover:bg-red-50 transition cursor-pointer"
                           title={`Delete ${pt.point_name}`}
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          Delete
                         </button>
                       </div>
                     </td>

@@ -33,9 +33,26 @@ export class Process10PointObixBatch {
     await this.telegramGateway.checkIncomingQuestionsAndReply(this.liveDataMap);
 
     // Step 2: Fetch points from Niagara oBIX
-    const points = await this.obixGateway.fetch10PointBatch();
+    const rawPoints = await this.obixGateway.fetch10PointBatch();
 
-    if (!points || points.length === 0) {
+    if (!rawPoints || rawPoints.length === 0) {
+      return 0;
+    }
+
+    // Strictly discard Niagara workspace meta (wsAnnotation) and deduplicate
+    const pointMap = new Map<string, SensorPoint>();
+    for (const pt of rawPoints) {
+      if (
+        pt.name &&
+        !pt.name.toLowerCase().includes("wsannotation") &&
+        !pt.name.toLowerCase().startsWith("ws")
+      ) {
+        pointMap.set(pt.name, pt);
+      }
+    }
+    const points = Array.from(pointMap.values());
+
+    if (points.length === 0) {
       return 0;
     }
 

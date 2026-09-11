@@ -15,6 +15,13 @@ export class SupabaseSensorRepository implements ISensorRepository {
   public async saveBatchReadings(points: SensorPoint[]): Promise<void> {
     if (points.length === 0) return;
 
+    // Filter out Niagara workspace metadata like wsAnnotation
+    const validPoints = points.filter(
+      (pt) => pt.name && pt.name !== "wsAnnotation" && !pt.name.toLowerCase().startsWith("ws")
+    );
+
+    if (validPoints.length === 0) return;
+
     // Build batch payloads for single HTTP request
     // Helper to format exact local PC timestamp (YYYY-MM-DD HH:mm:ss)
     const getLocalTimestamp = (): string => {
@@ -31,19 +38,30 @@ export class SupabaseSensorRepository implements ISensorRepository {
 
     const nowLocal = getLocalTimestamp();
 
-    const sensorPointsBatch = points.map((pt) => ({
-      point_name: pt.name,
-      current_value: pt.numericValue,
-      alert_threshold: pt.highLimit,
-      is_alarm: pt.isAlarm(),
-      updated_at: nowLocal,
-    }));
+    // Deduplicate by point_name so Postgres never throws ON CONFLICT DO UPDATE multiple row error
+    const sensorPointMap = new Map<string, any>();
+    for (const pt of validPoints) {
+      sensorPointMap.set(pt.name, {
+        point_name: pt.name,
+        device_name: pt.deviceName || "Niagara Controller",
+        floor_name: pt.floorName || "GF",
+        current_value: pt.numericValue,
+        alert_threshold: pt.highLimit,
+        is_alarm: pt.isAlarm(),
+        updated_at: nowLocal,
+      });
+    }
+    const sensorPointsBatch = Array.from(sensorPointMap.values());
 
-    const pointReadingsBatch = points.map((pt) => ({
-      point_name: pt.name,
-      value: pt.numericValue,
-      recorded_at: nowLocal,
-    }));
+    const readingMap = new Map<string, any>();
+    for (const pt of validPoints) {
+      readingMap.set(pt.name, {
+        point_name: pt.name,
+        value: pt.numericValue,
+        recorded_at: nowLocal,
+      });
+    }
+    const pointReadingsBatch = Array.from(readingMap.values());
 
     // 1. Single Batch Upsert into sensor_points table
     try {

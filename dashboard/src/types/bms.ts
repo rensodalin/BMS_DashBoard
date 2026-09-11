@@ -16,6 +16,7 @@ export interface SensorPoint {
   point_name: string;
   device_name?: string;
   building_name?: string;
+  floor_name?: string;
   obix_url?: string;
   current_value: number;
   display_value?: string;

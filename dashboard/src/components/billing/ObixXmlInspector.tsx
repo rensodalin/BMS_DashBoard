@@ -93,7 +93,7 @@ export const ObixXmlInspector: React.FC<ObixXmlInspectorProps> = ({
             <Code2 className="w-4 h-4" />
           </div>
           <div>
-            <h3 className="text-xs font-bold font-mono tracking-wider text-cyan-300 uppercase flex items-center gap-2">
+            <h3 className="text-xs font-bold font-mono text-cyan-300 flex items-center gap-2">
               Niagara oBIX Endpoint Tester & Inspector
             </h3>
             <p className="text-[11px] text-slate-400">

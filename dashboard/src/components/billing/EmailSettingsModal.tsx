@@ -132,7 +132,7 @@ export const EmailSettingsModal: React.FC<EmailSettingsModalProps> = ({
               <Mail className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold tracking-wide text-white flex items-center gap-2">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <span>Gmail SMTP Dispatch Settings</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#00a4e4]/15 text-[#38bdf8] border border-[#00a4e4]/30">
                   Direct Delivery
@@ -181,7 +181,7 @@ export const EmailSettingsModal: React.FC<EmailSettingsModalProps> = ({
           {/* Form Fields */}
           <div className="space-y-3">
             <div>
-              <label className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1">
+              <label className="block text-[11px] font-medium text-slate-400 mb-1">
                 Your Gmail Address
               </label>
               <div className="relative">
@@ -200,7 +200,7 @@ export const EmailSettingsModal: React.FC<EmailSettingsModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1">
+              <label className="block text-[11px] font-medium text-slate-400 mb-1">
                 16-Character Google App Password
               </label>
               <div className="relative">
@@ -224,7 +224,7 @@ export const EmailSettingsModal: React.FC<EmailSettingsModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1">
+              <label className="block text-[11px] font-medium text-slate-400 mb-1">
                 Sender Display Name
               </label>
               <input

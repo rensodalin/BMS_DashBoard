@@ -392,17 +392,17 @@ export const TenantBillSheet = React.forwardRef<HTMLDivElement, TenantBillSheetP
           {/* Current Balance Due & Pay By Highlight Boxes */}
           <div className="flex items-stretch gap-0 shrink-0 shadow-sm rounded-sm overflow-hidden">
             <div className="bg-[#005a87] text-white px-6 py-2.5 flex flex-col items-center justify-center min-w-[170px]">
-              <span className="text-[11px] font-medium tracking-wide text-sky-100">
+              <span className="text-[11px] font-medium text-sky-100">
                 Current balance due
               </span>
-              <span className="text-2xl sm:text-3xl font-black tracking-tight leading-tight font-mono">
+              <span className="text-2xl sm:text-3xl font-bold leading-tight font-mono">
                 ${totalAmountDue.toFixed(2)}
               </span>
             </div>
 
             <div className="bg-[#003652] text-white border-l border-white/10 px-5 py-2.5 flex flex-col items-center justify-center min-w-[110px]">
               <span className="text-[11px] font-medium text-sky-200">Pay By</span>
-              <span className="text-base sm:text-lg font-bold tracking-tight font-mono">
+              <span className="text-base sm:text-lg font-bold font-mono">
                 {payByDateStr}
               </span>
             </div>
@@ -412,7 +412,7 @@ export const TenantBillSheet = React.forwardRef<HTMLDivElement, TenantBillSheetP
         {/* ── 2. Account & Delivery Information Banner ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-1 text-[11.5px] leading-tight">
           <div className="space-y-1">
-            <div className="font-extrabold text-slate-900 uppercase tracking-wide text-[12.5px]">
+            <div className="font-bold text-slate-900 text-[13px]">
               {customerName}
             </div>
             <div className="text-slate-600 font-medium">
@@ -539,7 +539,7 @@ export const TenantBillSheet = React.forwardRef<HTMLDivElement, TenantBillSheetP
                 {/* Framed Legend Card on Right of Pie */}
                 <div className="sm:col-span-6 flex flex-col justify-center">
                   <div className="border border-slate-200 rounded-md bg-white p-2.5 shadow-xs">
-                    <div className="text-[10px] font-bold text-slate-800 tracking-wider uppercase mb-1.5 pb-1 border-b border-slate-100 flex items-center justify-between">
+                    <div className="text-[10px] font-bold text-slate-800 mb-1.5 pb-1 border-b border-slate-100 flex items-center justify-between">
                       <span>Legend</span>
                       <span className="text-[9px] font-mono text-slate-500 font-normal">12 Months</span>
                     </div>
@@ -602,7 +602,7 @@ export const TenantBillSheet = React.forwardRef<HTMLDivElement, TenantBillSheetP
               {/* Metric Header */}
               <div className="flex items-baseline justify-between mb-0.5">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-black text-slate-900 tracking-tight font-mono">
+                  <span className="text-2xl font-bold text-slate-900 font-mono">
                     {dailyAverageKwh}
                   </span>
                   <span className="text-xs font-bold text-slate-700">kWh</span>
@@ -827,8 +827,8 @@ export const TenantBillSheet = React.forwardRef<HTMLDivElement, TenantBillSheetP
           {/* ── RIGHT COLUMN: Account Statement Table & Messages For You ── */}
           <div className="lg:col-span-7 flex flex-col gap-3 justify-between">
             <div>
-              <div className="text-[10.5px] font-bold text-slate-900 tracking-wider uppercase mb-1 flex items-center justify-between">
-                <span>ACCOUNT STATEMENT &amp; SUB-METER SUMMARY</span>
+              <div className="text-xs font-bold text-slate-800 mb-1 flex items-center justify-between">
+                <span>Account Statement &amp; Sub-Meter Summary</span>
                 <span className="text-[10px] font-mono text-[#005a87] font-semibold">{invoice.invoice_number}</span>
               </div>
               <div className="border border-slate-200 rounded-md overflow-hidden bg-white">

@@ -2,6 +2,143 @@ import { IObixGateway } from "../../adapters/gateways/IObixGateway";
 import { SensorPoint } from "../../domain/entities/SensorPoint";
 import { ObixCredentials } from "../../domain/value-objects/ObixCredentials";
 
+/**
+ * Decode Niagara BFormat hex characters ($xx) and URI encoding
+ * Examples: $31 -> "1", $32 -> "2", $20 -> " ", $33 -> "3"
+ */
+function decodeNiagaraName(s: string): string {
+  if (!s) return "";
+  let decoded = s.replace(/\$([0-9a-fA-F]{2})/g, (_, hex) => {
+    try {
+      return String.fromCharCode(parseInt(hex, 16));
+    } catch {
+      return hex;
+    }
+  });
+  try {
+    decoded = decodeURIComponent(decoded);
+  } catch {}
+  return decoded.trim();
+}
+
+/**
+ * Dynamically extract standardized floor name from Niagara folder reference
+ * e.g. <ref name="GF" ...> -> "Ground Floor"
+ *      <ref name="$31F" displayName="1F" ...> -> "Floor 1"
+ *      <ref name="$32F" displayName="2F" ...> -> "Floor 2"
+ *      <ref name="$33F" displayName="3F" ...> -> "Floor 3"
+ */
+function detectFloorFromNiagaraRef(
+  refName: string,
+  displayName?: string,
+  href?: string
+): string | null {
+  const rawDisplay = (displayName || "").trim();
+  const decodedRef = decodeNiagaraName(refName);
+  const candidate = rawDisplay || decodedRef || "";
+  const clean = candidate.replace(/[-_]+/g, " ").trim();
+  const lower = clean.toLowerCase();
+
+  // Ground Floor
+  if (
+    lower === "gf" ||
+    lower === "g" ||
+    lower.startsWith("gf/") ||
+    lower.includes("ground")
+  ) {
+    return "Ground Floor";
+  }
+
+  // 1F, First_Floor, First Floor, Floor 1, $31F
+  if (
+    lower.includes("first") ||
+    lower.includes("1st") ||
+    lower === "1f" ||
+    lower === "$31f" ||
+    lower === "floor 1" ||
+    lower === "floor1" ||
+    lower === "1"
+  ) {
+    return "Floor 1";
+  }
+
+  // 2F, Second_Floor, Second Floor, Floor 2, $32F
+  if (
+    lower.includes("second") ||
+    lower.includes("2nd") ||
+    lower === "2f" ||
+    lower === "$32f" ||
+    lower === "floor 2" ||
+    lower === "floor2" ||
+    lower === "2"
+  ) {
+    return "Floor 2";
+  }
+
+  // 3F, Third_Floor, Third Floor, Floor 3, $33F
+  if (
+    lower.includes("third") ||
+    lower.includes("3rd") ||
+    lower === "3f" ||
+    lower === "$33f" ||
+    lower === "floor 3" ||
+    lower === "floor3" ||
+    lower === "3"
+  ) {
+    return "Floor 3";
+  }
+
+  // 4F, Fourth_Floor
+  if (
+    lower.includes("fourth") ||
+    lower.includes("4th") ||
+    lower === "4f" ||
+    lower === "$34f" ||
+    lower === "floor 4" ||
+    lower === "floor4" ||
+    lower === "4"
+  ) {
+    return "Floor 4";
+  }
+
+  // Generic digit F matching: "5F" -> "Floor 5"
+  const fMatch = lower.match(/^(\d+)\s*f$/i) || lower.match(/^f\s*(\d+)$/i);
+  if (fMatch) {
+    return `Floor ${fMatch[1]}`;
+  }
+
+  // Floor 1, Floor 2, etc.
+  const floorMatch = lower.match(/^floor\s*(\d+)$/i);
+  if (floorMatch) {
+    return `Floor ${floorMatch[1]}`;
+  }
+
+  // Basements
+  if (lower === "b1" || lower === "b2" || lower.includes("basement")) {
+    return "Basement";
+  }
+
+  // Rooftop
+  if (lower.includes("roof")) {
+    return "Rooftop";
+  }
+
+  // Pure digits
+  if (/^\d+$/.test(clean)) {
+    return `Floor ${clean}`;
+  }
+
+  // If candidate is explicitly formatted or contains floor indicator
+  if (lower.includes("floor")) {
+    return clean
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  }
+
+  return null;
+}
+
 export class ObixHttpGateway implements IObixGateway {
   private readonly obixUrl: string;
   private readonly authHeader: string;
@@ -42,26 +179,47 @@ export class ObixHttpGateway implements IObixGateway {
       );
     }
 
-    // Crawl starting from target obixUrl
-    const points = await this.crawlUrl(this.obixUrl, defaultDeviceName, 0);
+    // Check if starting URL itself points to a specific floor folder (e.g. /GF/ or /First_Floor/)
+    let initialFloor: string | undefined = undefined;
+    const lastSegment = segments[segments.length - 1];
+    if (
+      lastSegment &&
+      lastSegment.toLowerCase() !== "drivers" &&
+      !lastSegment.toLowerCase().includes("billing")
+    ) {
+      initialFloor = decodeNiagaraName(lastSegment);
+    }
 
-    if (points.length === 0) {
+    // Crawl starting from target obixUrl
+    const points = await this.crawlUrl(this.obixUrl, defaultDeviceName, 0, initialFloor);
+
+    // Strictly discard Niagara workspace metadata like wsAnnotation
+    const validPoints = points.filter(
+      (p) =>
+        p.name &&
+        !p.name.toLowerCase().includes("wsannotation") &&
+        !p.name.toLowerCase().startsWith("ws")
+    );
+
+    if (validPoints.length === 0) {
       console.warn(`[oBIX Debug] 0 points parsed from: ${this.obixUrl}`);
     }
 
-    return points;
+    return validPoints;
   }
 
   /**
    * Recursive crawler that fetches Niagara oBIX XML endpoints,
-   * ignores folders (`display="Folder"`), and extracts actual sensor points.
+   * dynamically captures floor subfolders, ignores Niagara workspace meta,
+   * and extracts actual sensor points with their detected floorName.
    */
   private async crawlUrl(
     targetUrl: string,
     deviceName: string,
-    depth: number = 0
+    depth: number = 0,
+    currentFloor?: string
   ): Promise<SensorPoint[]> {
-    if (depth > 3) return []; // Prevent infinite recursion loops
+    if (depth > 4) return []; // Prevent infinite recursion loops
 
     const points: SensorPoint[] = [];
     const urlWithSlash = targetUrl.endsWith("/") ? targetUrl : `${targetUrl}/`;
@@ -90,7 +248,7 @@ export class ObixHttpGateway implements IObixGateway {
 
       const xmlText = await res.text();
 
-      // Check if Niagara returned an error response Start
+      // Check if Niagara returned an error response
       const errMatch = xmlText.match(/<err\b[^>]*>/i);
       if (errMatch && depth === 0) {
         const displayMatch = xmlText.match(/\bdisplay=["']([^"']+)["']/i);
@@ -112,27 +270,38 @@ export class ObixHttpGateway implements IObixGateway {
 
         if (displayVal && displayVal.toLowerCase() !== "folder" && !isVal.includes("folder")) {
           const ptSegment = nameAttr || targetUrl.replace(/\/$/, "").split("/").pop() || "Point";
-          const cleanPtName = decodeURIComponent(ptSegment.replace(/\$20/g, " ").replace(/%20/g, " "));
-          const pt = SensorPoint.evaluatePoint(deviceName, cleanPtName, displayVal);
+          const cleanPtName = decodeNiagaraName(ptSegment);
+          const pt = SensorPoint.evaluatePoint(deviceName, cleanPtName, displayVal, currentFloor);
           points.push(pt);
           return points; // Leaf point captured; do not crawl proxyExt/ children
         }
       }
 
-      // 1. Process <ref name="..." href="..." display="...">
-      const refMatches = Array.from(
-        xmlText.matchAll(/<ref\s+[^>]*name="([^"]+)"[^>]*href="([^"]+)"(?:[^>]*display="([^"]+)")?/gi)
-      );
+      // 1. Process <ref ...> tags with flexible attribute order and optional displayName
+      const refMatches = Array.from(xmlText.matchAll(/<ref\b([^>]+)>/gi));
 
       for (const match of refMatches) {
-        const refName = match[1];
-        const href = match[2];
-        const displayStr = (match[3] || "").trim();
+        const attrs = match[1];
+        const getAttr = (attr: string) => {
+          const m = attrs.match(new RegExp(`\\b${attr}=["']([^"']+)["']`, "i"));
+          return m ? m[1] : "";
+        };
 
+        const refName = getAttr("name");
+        const href = getAttr("href");
+        const displayStr = (getAttr("display") || "").trim();
+        const displayName = (getAttr("displayName") || "").trim();
+        const isType = getAttr("is");
+
+        if (!refName && !href) continue;
+
+        const lowerRef = refName.toLowerCase();
         if (
-          refName.includes("proxyExt") ||
-          refName.includes("ObixNetwork") ||
-          refName.includes("Random") ||
+          lowerRef.includes("proxyext") ||
+          lowerRef.includes("obixnetwork") ||
+          lowerRef.includes("random") ||
+          lowerRef.includes("wsannotation") ||
+          lowerRef.startsWith("ws") ||
           refName === "out" ||
           refName === "in" ||
           refName === "in16" ||
@@ -147,11 +316,20 @@ export class ObixHttpGateway implements IObixGateway {
 
         const isFolder =
           displayStr.toLowerCase() === "folder" ||
+          isType.toLowerCase().includes("folder") ||
           (!displayStr && href.endsWith("/"));
 
-        // 1. IF IT'S A FOLDER: Crawl inside it recursively!
+        // 1. IF IT'S A FOLDER: Crawl inside it recursively and capture floor!
         if (isFolder) {
-          const cleanRef = refName.replace(/\$20/g, " ").replace(/%20/g, " ");
+          const cleanRef = displayName || decodeNiagaraName(refName);
+
+          // Direct subfolders under Billing System (depth === 0) ARE the floors!
+          // e.g. "GF", "First_Floor", "Second_Floor"
+          let nextFloor = currentFloor;
+          if (depth === 0) {
+            nextFloor = cleanRef;
+          }
+
           const subDeviceName =
             depth === 0
               ? (deviceName === "Drivers" ? cleanRef : `${deviceName} - ${cleanRef}`)
@@ -164,35 +342,50 @@ export class ObixHttpGateway implements IObixGateway {
             subUrl = `${urlWithSlash}${href.replace(/^\//, "")}`;
           }
 
-          const subPoints = await this.crawlUrl(subUrl, subDeviceName, depth + 1);
+          const subPoints = await this.crawlUrl(subUrl, subDeviceName, depth + 1, nextFloor);
           points.push(...subPoints);
         }
         // 2. IF IT'S A SENSOR POINT (displayValue is not "Folder"): Evaluate point!
         else if (displayStr) {
-          const cleanPtName = refName.replace(/\$20/g, " ").replace(/%20/g, " ");
-          const pt = SensorPoint.evaluatePoint(deviceName, cleanPtName, displayStr);
+          const cleanPtName = displayName || decodeNiagaraName(refName);
+          const pt = SensorPoint.evaluatePoint(deviceName, cleanPtName, displayStr, currentFloor);
           points.push(pt);
         }
       }
 
       // 2. Also process direct Niagara primitive value tags: <real>, <bool>, <int>, <enum>, <str>
       const directMatches = Array.from(
-        xmlText.matchAll(/<(real|bool|int|enum|str)\s+[^>]*name="([^"]+)"(?:[^>]*val="([^"]+)")?(?:[^>]*display="([^"]+)")?/gi)
+        xmlText.matchAll(/<(real|bool|int|enum|str)\b([^>]+)>/gi)
       );
 
       for (const match of directMatches) {
-        const ptName = match[2];
-        const valAttr = match[3] || "";
-        const displayAttr = match[4] || "";
-        const displayStr = (displayAttr || valAttr).trim();
+        const attrs = match[2];
+        const getAttr = (attr: string) => {
+          const m = attrs.match(new RegExp(`\\b${attr}=["']([^"']+)["']`, "i"));
+          return m ? m[1] : "";
+        };
 
-        if (!displayStr || ptName.includes("ObixNetwork") || ptName.includes("Random")) {
+        const ptName = getAttr("name");
+        const valAttr = getAttr("val");
+        const displayAttr = getAttr("display");
+        const displayName = getAttr("displayName");
+        const displayStr = (displayAttr || valAttr).trim();
+        const lowerPt = ptName.toLowerCase();
+
+        if (
+          !displayStr ||
+          lowerPt.includes("obixnetwork") ||
+          lowerPt.includes("random") ||
+          lowerPt.includes("wsannotation") ||
+          lowerPt.startsWith("ws")
+        ) {
           continue;
         }
 
-        const cleanPtName = ptName.replace(/\$20/g, " ").replace(/%20/g, " ");
+        const cleanPtName = displayName || decodeNiagaraName(ptName);
+
         if (!points.some((p) => p.name === cleanPtName)) {
-          const pt = SensorPoint.evaluatePoint(deviceName, cleanPtName, displayStr);
+          const pt = SensorPoint.evaluatePoint(deviceName, cleanPtName, displayStr, currentFloor);
           points.push(pt);
         }
       }

@@ -243,7 +243,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
               <Zap className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold tracking-wide text-white">
+              <h3 className="text-sm font-semibold text-white">
                 Add Sub-Meter / Tenant Invoice
               </h3>
               <p className="text-[11px] text-[#8b929e]">
@@ -272,7 +272,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
             {/* Section 1: Niagara oBIX Integration */}
             <div className="p-3 rounded bg-[#0e0f13] border border-[#202228]">
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <label className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
                   <Link className="w-3.5 h-3.5 text-[#00a4e4]" />
                   Niagara oBIX Power Meter URL
                 </label>
@@ -292,7 +292,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
 
             {/* Section 2: Tenant & Unit Info */}
             <div className="space-y-3">
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <div className="text-[11px] font-semibold text-slate-400">
                 Tenant & Identification
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -380,7 +380,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
             {/* Section 3: Billing Cycle Dates */}
             <div className="space-y-2.5 pt-1">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <span className="text-[11px] font-semibold text-slate-400">
                   Billing Period & Schedule
                 </span>
                 <span className="text-[10px] text-slate-500 font-mono">Date Range Presets:</span>
@@ -482,7 +482,7 @@ export const AddTenantInvoiceModal: React.FC<AddTenantInvoiceModalProps> = ({
 
             {/* Section 4: Energy Reading & Tariff */}
             <div className="space-y-2.5 pt-1">
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <div className="text-[11px] font-semibold text-slate-400">
                 Telemetry Reading & Cost Allocation
               </div>
 
