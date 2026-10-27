@@ -12,19 +12,18 @@ import {
   Layers,
 } from 'lucide-react';
 import type { TenantInvoiceDb, SensorPoint } from '../../types/bms';
-import { fetchMeterReadingRange, type MeterReadingRangeResult } from '../../lib/supabase';
-import { getInvoiceFloor } from '../../lib/floorUtils';
+import { fetchMeterReadingRange, toStandardIso, type MeterReadingRangeResult } from '../../lib/supabase';
+import { getInvoiceFloor, getMeterIdentityKey, findLiveMeterPoint } from '../../lib/floorUtils';
 
 export const toDateTimeInputValue = (val?: string): string => {
   if (!val) return '';
-  if (val.length === 10) return `${val}T00:00:00`;
-  if (val.includes(' ') && !val.includes('T')) return val.replace(' ', 'T');
-  return val;
+  const iso = toStandardIso(val);
+  return iso.length >= 19 ? iso.slice(0, 19) : iso;
 };
 
 export const formatDisplayDateTime = (val?: string): string => {
   if (!val) return 'N/A';
-  const clean = val.replace('T', ' ');
+  const clean = toStandardIso(val).replace('T', ' ');
   return clean.length >= 19 ? clean.slice(0, 19) : clean;
 };
 
@@ -32,7 +31,8 @@ export const formatShortDateRange = (startStr?: string, endStr?: string): string
   if (!startStr && !endStr) return 'Current Cycle';
   const cleanDate = (s?: string) => {
     if (!s) return '';
-    const part = s.split('T')[0].split(' ')[0];
+    const iso = toStandardIso(s);
+    const part = iso.split('T')[0].split(' ')[0];
     const p = part.split('-');
     return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(2)}` : part;
   };
@@ -44,8 +44,10 @@ export const formatShortDateRange = (startStr?: string, endStr?: string): string
 
 export const getDurationText = (startStr?: string, endStr?: string): string | null => {
   if (!startStr || !endStr) return null;
-  const s = new Date(startStr.includes(' ') ? startStr.replace(' ', 'T') : startStr).getTime();
-  const e = new Date(endStr.includes(' ') ? endStr.replace(' ', 'T') : endStr).getTime();
+  const sIso = toStandardIso(startStr);
+  const eIso = toStandardIso(endStr);
+  const s = new Date(sIso).getTime();
+  const e = new Date(eIso).getTime();
   if (isNaN(s) || isNaN(e) || e < s) return null;
   const diffSec = Math.floor((e - s) / 1000);
   const d = Math.floor(diffSec / 86400);
@@ -95,8 +97,10 @@ export const calculateIntervalConsumption = (
     };
   }
 
-  const s = new Date(startStr.includes(' ') ? startStr.replace(' ', 'T') : startStr);
-  const e = new Date(endStr.includes(' ') ? endStr.replace(' ', 'T') : endStr);
+  const cleanStart = toStandardIso(startStr);
+  const cleanEnd = toStandardIso(endStr);
+  const s = new Date(cleanStart);
+  const e = new Date(cleanEnd);
 
   const sTime = s.getTime();
   const eTime = e.getTime();
@@ -143,21 +147,26 @@ export const calculateIntervalConsumption = (
 
   let calculatedKwh = 0;
   let hasTelemetry = false;
-  const startReading = rangeResult?.startReading ?? null;
-  const endReading = rangeResult?.endReading ?? null;
+  let resolvedStartReading = rangeResult?.startReading ?? null;
+  let resolvedEndReading = rangeResult?.endReading ?? null;
 
-  if (rangeResult && rangeResult.deltaKwh !== null && rangeResult.deltaKwh > 0) {
+  if (rangeResult && rangeResult.deltaKwh !== null && rangeResult.deltaKwh >= 0) {
     calculatedKwh = rangeResult.deltaKwh;
     hasTelemetry = true;
-  } else if (startReading !== null && endReading !== null && endReading > startReading) {
-    calculatedKwh = Math.max(0, Number((endReading - startReading).toFixed(3)));
+  } else if (resolvedStartReading !== null && resolvedEndReading !== null && resolvedEndReading >= resolvedStartReading) {
+    // Exact delta: End Reading - Start Reading (e.g. 200 kWh - 100 kWh = 100 kWh)
+    calculatedKwh = Math.max(0, Number((resolvedEndReading - resolvedStartReading).toFixed(3)));
     hasTelemetry = true;
   } else {
-    // If telemetry delta has no positive change or is loading, fall back to baseKwh
-    calculatedKwh = baseKwh > 0
-      ? (fraction > 0 && fraction < 1 ? Number((baseKwh * fraction).toFixed(2)) : baseKwh)
-      : 0;
-    hasTelemetry = rangeResult?.deltaKwh !== null && rangeResult?.deltaKwh !== undefined && rangeResult.deltaKwh > 0;
+    // Dynamic consumption calculation based on applied date or hour interval (End Hour − Start Hour)
+    if (fraction > 0 && fraction < 1) {
+      calculatedKwh = Number((baseKwh * fraction).toFixed(3));
+    } else {
+      calculatedKwh = baseKwh;
+    }
+    resolvedEndReading = baseKwh;
+    resolvedStartReading = Math.max(0, Number((baseKwh - calculatedKwh).toFixed(3)));
+    hasTelemetry = false;
   }
 
   return {
@@ -168,8 +177,8 @@ export const calculateIntervalConsumption = (
     fraction,
     startHourStr,
     endHourStr,
-    startReading,
-    endReading,
+    startReading: resolvedStartReading,
+    endReading: resolvedEndReading,
     hasTelemetry,
   };
 };
@@ -236,8 +245,15 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
 }) => {
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
 
-  // Internal fallback polling for interval telemetry
-  const [internalIntervalDataMap, setInternalIntervalDataMap] = React.useState<Record<string, MeterReadingRangeResult>>({});
+  // Internal fallback cache for interval telemetry
+  const [internalIntervalDataMap, setInternalIntervalDataMap] = React.useState<Record<string, MeterReadingRangeResult>>(() => {
+    try {
+      const raw = localStorage.getItem('bms_billing_interval_cache_v1');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
   const intervalDataMap = propIntervalDataMap && Object.keys(propIntervalDataMap).length > 0
     ? propIntervalDataMap
     : internalIntervalDataMap;
@@ -255,17 +271,32 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
 
         await Promise.all(
           invoices.map(async (inv) => {
-            const start = inv.start_date || startDate;
-            const end = inv.end_date || endDate;
-            if (!start || !end) return;
-            const meter = inv.meter_name || inv.tenant_name;
+            const start = startDate || inv.start_date;
+            const end = endDate || inv.end_date;
+            const liveMatch = findLiveMeterPoint(points, inv.meter_name, inv.tenant_name);
+            const meter = liveMatch ? liveMatch.point_name : (inv.meter_name || inv.tenant_name);
+            if (!meter || !start || !end) return;
             const res = await fetchMeterReadingRange(meter, start, end);
+            const idKey = getMeterIdentityKey(inv.meter_name, inv.tenant_name);
             results[inv.invoice_number] = res;
+            if (inv.meter_name) results[inv.meter_name] = res;
+            if (idKey) results[idKey] = res;
+
+            const dateKey = `${toStandardIso(start)}_${toStandardIso(end)}`;
+            results[`${inv.invoice_number}_${dateKey}`] = res;
+            if (inv.meter_name) results[`${inv.meter_name}_${dateKey}`] = res;
+            if (idKey) results[`${idKey}_${dateKey}`] = res;
           })
         );
 
         if (isMounted) {
-          setInternalIntervalDataMap((prev) => ({ ...prev, ...results }));
+          setInternalIntervalDataMap((prev) => {
+            const next = { ...prev, ...results };
+            try {
+              localStorage.setItem('bms_billing_interval_cache_v1', JSON.stringify(next));
+            } catch {}
+            return next;
+          });
         }
       } finally {
         isFetching = false;
@@ -273,12 +304,10 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
     };
 
     fetchAllIntervals();
-    const interval = setInterval(fetchAllIntervals, 5000);
     return () => {
       isMounted = false;
-      clearInterval(interval);
     };
-  }, [invoices, startDate, endDate]);
+  }, [startDate, endDate, invoices?.length]);
 
   const paidCount = invoices.filter((i) => i.status === 'PAID').length;
   const pendingCount = invoices.filter((i) => i.status === 'PENDING').length;
@@ -310,44 +339,40 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={() => onStatusFilterChange('ALL')}
-            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              statusFilter === 'ALL'
+            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${statusFilter === 'ALL'
                 ? 'bg-[#001F3F] text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-            }`}
+              }`}
           >
             All Invoices ({invoices.length})
           </button>
 
           <button
             onClick={() => onStatusFilterChange('PAID')}
-            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              statusFilter === 'PAID'
+            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${statusFilter === 'PAID'
                 ? 'bg-[#001F3F] text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-            }`}
+              }`}
           >
             Paid ({paidCount})
           </button>
 
           <button
             onClick={() => onStatusFilterChange('PENDING')}
-            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              statusFilter === 'PENDING'
+            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${statusFilter === 'PENDING'
                 ? 'bg-[#001F3F] text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-            }`}
+              }`}
           >
             Pending ({pendingCount})
           </button>
 
           <button
             onClick={() => onStatusFilterChange('OVERDUE')}
-            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-              statusFilter === 'OVERDUE'
+            className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${statusFilter === 'OVERDUE'
                 ? 'bg-[#FF3523] text-white shadow-sm'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-            }`}
+              }`}
           >
             Overdue ({overdueCount})
           </button>
@@ -624,23 +649,47 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
             ) : (
               invoices.map((inv) => {
                 const isSelected = selectedInvoices.has(inv.invoice_number);
-                const intervalInfo = intervalDataMap[inv.invoice_number];
+                const idKey = getMeterIdentityKey(inv.meter_name, inv.tenant_name);
+                const effectiveStart = startDate || inv.start_date;
+                const effectiveEnd = endDate || inv.end_date;
+                const liveMatch = findLiveMeterPoint(points, inv.meter_name, inv.tenant_name);
+                const currentBaseReading = (liveMatch && typeof liveMatch.current_value === 'number' && liveMatch.current_value > 0)
+                  ? liveMatch.current_value
+                  : (inv.base_kwh || inv.kwh_reading || 0);
+                const dateKey = `${toStandardIso(effectiveStart)}_${toStandardIso(effectiveEnd)}`;
+
+                const intervalInfo =
+                  intervalDataMap[`${inv.invoice_number}_${dateKey}`] ||
+                  (inv.meter_name ? intervalDataMap[`${inv.meter_name}_${dateKey}`] : undefined) ||
+                  intervalDataMap[`${idKey}_${dateKey}`] ||
+                  intervalDataMap[inv.invoice_number] ||
+                  (inv.meter_name ? intervalDataMap[inv.meter_name] : undefined) ||
+                  intervalDataMap[idKey];
                 const { kwh: calcKwh } = calculateIntervalConsumption(
-                  inv.kwh_reading,
-                  inv.start_date || startDate,
-                  inv.end_date || endDate,
+                  currentBaseReading,
+                  effectiveStart,
+                  effectiveEnd,
                   intervalInfo
                 );
 
                 const isOverdue = inv.status === 'OVERDUE';
-                const duration = getDurationText(inv.start_date || startDate, inv.end_date || endDate);
+                const duration = getDurationText(effectiveStart, effectiveEnd);
+
+                const effectiveInvoice: TenantInvoiceDb = {
+                  ...inv,
+                  base_kwh: currentBaseReading,
+                  start_date: effectiveStart,
+                  end_date: effectiveEnd,
+                  kwh_reading: calcKwh,
+                  total_cost_usd: Number((calcKwh * (inv.rate_per_kwh || ratePerKwh || 0.155)).toFixed(2)),
+                  total_cost_khr: Number((calcKwh * (inv.rate_per_kwh || ratePerKwh || 0.155) * 4100).toFixed(2)),
+                };
 
                 return (
                   <tr
                     key={inv.invoice_number}
-                    className={`transition-colors ${
-                      isSelected ? 'bg-[#e6edf5]/50' : 'hover:bg-slate-50/80'
-                    }`}
+                    className={`transition-colors ${isSelected ? 'bg-[#e6edf5]/50' : 'hover:bg-slate-50/80'
+                      }`}
                   >
                     {/* Checkbox */}
                     <td className="py-3.5 px-3 w-8">
@@ -656,7 +705,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2">
                         <span
-                          onClick={() => onOpenEditInvoice && onOpenEditInvoice(inv)}
+                          onClick={() => onOpenEditInvoice && onOpenEditInvoice(effectiveInvoice)}
                           className="font-bold text-slate-800 hover:text-[#001F3F] cursor-pointer transition text-xs"
                           title="Click to edit invoice details"
                         >
@@ -685,7 +734,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                         </div>
                       ) : (
                         <div
-                          onClick={() => onOpenEditInvoice && onOpenEditInvoice(inv)}
+                          onClick={() => onOpenEditInvoice && onOpenEditInvoice(effectiveInvoice)}
                           className="text-[10px] text-slate-400 font-mono italic flex items-center gap-1 mt-0.5 cursor-pointer hover:text-amber-600"
                           title="Click to add tenant billing email"
                         >
@@ -699,10 +748,9 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                     <td className="py-3.5 px-4 font-mono">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span
-                          onClick={() => onSelectTenantTrend && onSelectTenantTrend(inv)}
-                          className={`text-xs text-slate-700 font-semibold ${
-                            onSelectTenantTrend ? 'cursor-pointer hover:text-[#001F3F] transition' : ''
-                          }`}
+                          onClick={() => onSelectTenantTrend && onSelectTenantTrend(effectiveInvoice)}
+                          className={`text-xs text-slate-700 font-semibold ${onSelectTenantTrend ? 'cursor-pointer hover:text-[#001F3F] transition' : ''
+                            }`}
                           title="Click to view telemetry trend"
                         >
                           {inv.meter_name}
@@ -716,11 +764,11 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                     {/* 3. BILLING PERIOD */}
                     <td className="py-3.5 px-4 font-mono text-xs">
                       <div
-                        onClick={() => onOpenEditInvoice && onOpenEditInvoice(inv)}
+                        onClick={() => onOpenEditInvoice && onOpenEditInvoice(effectiveInvoice)}
                         className="text-slate-700 text-xs font-medium hover:text-[#001F3F] cursor-pointer transition flex items-center gap-1.5"
                         title="Click to edit billing dates"
                       >
-                        <span>{formatShortDateRange(inv.start_date || startDate, inv.end_date || endDate)}</span>
+                        <span>{formatShortDateRange(effectiveStart, effectiveEnd)}</span>
                       </div>
                       <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
                         {duration ? <span>{duration}</span> : <span>{inv.billing_period || 'Current Period'}</span>}
@@ -739,8 +787,18 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                         <span className="text-[10px] text-slate-400 font-semibold">kWh</span>
                       </div>
 
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        Base: {inv.kwh_reading.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} kWh
+                      <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                        <span>Base:</span>
+                        <span className="font-mono font-medium text-slate-600">
+                          {currentBaseReading.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
+                        </span>
+                        <span>kWh</span>
+                        {liveMatch && (
+                          <span
+                            className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5"
+                            title="Live dynamic telemetry streaming from Niagara"
+                          />
+                        )}
                       </div>
                     </td>
 
@@ -770,7 +828,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                           type="button"
                           onClick={() => {
                             if (onViewInvoice) {
-                              onViewInvoice(inv);
+                              onViewInvoice(effectiveInvoice);
                             } else {
                               onExportInvoices();
                             }
@@ -784,7 +842,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                         {onSelectTenantTrend && (
                           <button
                             type="button"
-                            onClick={() => onSelectTenantTrend(inv)}
+                            onClick={() => onSelectTenantTrend(effectiveInvoice)}
                             className="px-2.5 py-1 rounded text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition cursor-pointer border border-slate-200"
                             title={`View energy trend for ${inv.tenant_name}`}
                           >
@@ -795,7 +853,7 @@ export const TenantInvoicesTable: React.FC<TenantInvoicesTableProps> = ({
                         {onOpenEditInvoice && (
                           <button
                             type="button"
-                            onClick={() => onOpenEditInvoice(inv)}
+                            onClick={() => onOpenEditInvoice(effectiveInvoice)}
                             className="px-2 py-1 rounded text-xs font-medium text-slate-500 hover:text-[#001F3F] hover:bg-slate-100 transition cursor-pointer"
                             title={`Edit ${inv.invoice_number}`}
                           >

@@ -12,6 +12,7 @@ import { ObixHttpGateway } from "./gateways/ObixHttpGateway";
 import { TelegramApiGateway } from "./gateways/TelegramApiGateway";
 import { SupabaseSensorRepository } from "./database/SupabaseSensorRepository";
 import { Process10PointObixBatch } from "../use-cases/Process10PointObixBatch";
+import { PaymentMonitoringWorker } from "../../server/workers/PaymentMonitoringWorker";
 
 // 💡 CONFIGURATION: Edit credentials & settings in your `.env` file!
 const TELEGRAM_TOKEN =
@@ -28,8 +29,8 @@ const ALLOW_SELFSIGNED = process.env.OBIX_ALLOW_SELFSIGNED_CERT !== "false";
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://YOUR_PROJECT_REF.supabase.co";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY";
 
-// Polling Interval in milliseconds (default: 3000 ms = 3 seconds)
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || "3000", 10);
+// Polling Interval in milliseconds (default: 1000 ms = 1 second)
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL_MS || "1000", 10);
 
 // Instantiate Clean Architecture Components (Dependency Injection)
 const obixGateway = new ObixHttpGateway(PARENT_OBIX_URL, USERNAME, PASSWORD, ALLOW_SELFSIGNED);
@@ -44,26 +45,28 @@ console.log("📡 Target oBIX URL:", PARENT_OBIX_URL);
 console.log(`⏰ Polling Interval: ${POLL_INTERVAL} ms`);
 console.log("===============================================================");
 
-// Main Execution Loop
-let isRunning = false;
+// 🚀 Start Real-Time Bakong KHQR Payment Monitoring & Telegram Alert Dispatcher
+PaymentMonitoringWorker.start();
 
-const runCycle = async () => {
-  if (isRunning) return;
-  isRunning = true;
-  try {
-    const syncedCount = await batchUseCase.execute();
-    if (syncedCount > 0) {
-      console.log(`[${new Date().toLocaleTimeString()}] ✅ ${syncedCount} Points synced to Supabase & evaluated.`);
-    } else {
-      console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ 0 Points fetched from oBIX endpoint. Check URL/credentials/connectivity.`);
+// High-Precision 1-Second Cadence Loop
+// Automatically compensates for network duration to guarantee 1 tick per second
+const runHighPrecisionLoop = async () => {
+  while (true) {
+    const startMs = Date.now();
+    try {
+      const syncedCount = await batchUseCase.execute();
+      if (syncedCount > 0) {
+        console.log(`[${new Date().toLocaleTimeString()}] ✅ ${syncedCount} Points recorded to Supabase.`);
+      } else {
+        console.warn(`[${new Date().toLocaleTimeString()}] ⚠️ 0 Points fetched from oBIX endpoint.`);
+      }
+    } catch (err: any) {
+      console.error(`[${new Date().toLocaleTimeString()}] ⚠️ Sync cycle warning:`, err.message || err);
     }
-  } catch (err: any) {
-    console.error(`[${new Date().toLocaleTimeString()}] ⚠️ Sync cycle warning:`, err.message || err);
-  } finally {
-    isRunning = false;
+    const elapsed = Date.now() - startMs;
+    const delay = Math.max(10, POLL_INTERVAL - elapsed);
+    await new Promise((resolve) => setTimeout(resolve, delay));
   }
 };
 
-// Execute initial scan cycle immediately, then repeat on interval
-runCycle();
-setInterval(runCycle, POLL_INTERVAL);
+runHighPrecisionLoop();

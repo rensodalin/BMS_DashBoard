@@ -4,6 +4,8 @@ import { SensorPoint } from "../../domain/entities/SensorPoint";
 
 export class SupabaseSensorRepository implements ISensorRepository {
   private supabase: SupabaseClient;
+  private cycleCounter: number = 0;
+  private isPruning: boolean = false;
 
   constructor(supabaseUrl: string, supabaseKey: string) {
     if (!supabaseUrl || !supabaseKey) {
@@ -63,31 +65,109 @@ export class SupabaseSensorRepository implements ISensorRepository {
     }
     const pointReadingsBatch = Array.from(readingMap.values());
 
-    // 1. Single Batch Upsert into sensor_points table
+    // Execute sensor_points upsert & point_readings insert in parallel for max speed
     try {
-      const { error: upsertErr } = await this.supabase
+      const [upsertRes, insertRes] = await Promise.all([
+        this.supabase
+          .from("sensor_points")
+          .upsert(sensorPointsBatch, { onConflict: "point_name" }),
+        this.supabase
+          .from("point_readings")
+          .insert(pointReadingsBatch),
+      ]);
+
+      if (upsertRes.error) {
+        console.error("❌ Supabase Batch Upsert Error:", upsertRes.error.message);
+      }
+      if (insertRes.error) {
+        console.error("❌ Supabase Batch Insert Error:", insertRes.error.message);
+      }
+    } catch (e: any) {
+      console.warn("⚠️ Temporary Supabase Network Warning:", e.message || e);
+    }
+
+    // 3. Periodic Rolling Retention Cleanup (keeps ample history for billing ranges)
+    // Only trims when accumulated beyond 20,000 points per meter, running every 10 minutes
+    this.cycleCounter++;
+    if (this.cycleCounter % 600 === 0) {
+      this.pruneOldReadings(20000).catch(() => {});
+    }
+  }
+
+  /**
+   * Prunes historical readings exceeding maxPointsPerMeter (default 20,000 points)
+   * retaining ample historical points for accurate interval billing and trends.
+   */
+  public async pruneOldReadings(
+    maxPointsPerMeter: number = 20000
+  ): Promise<number> {
+    if (this.isPruning) return 0;
+    this.isPruning = true;
+    let totalDeleted = 0;
+
+    try {
+      // 1. Primary: Fast Postgres Stored Procedure RPC
+      let { data, error } = await this.supabase.rpc("prune_old_point_readings", {
+        max_points_per_meter: maxPointsPerMeter,
+      });
+
+      if (error && error.code === "PGRST202") {
+        const retry = await this.supabase.rpc("prune_old_point_readings", {
+          max_points_per_meter: maxPointsPerMeter,
+          retention_days: 30,
+        });
+        data = retry.data;
+        error = retry.error;
+      }
+
+      if (!error && (typeof data === "number" || typeof data === "string")) {
+        totalDeleted = Number(data);
+        if (totalDeleted > 0) {
+          console.log(
+            `[Retention Policy (Record Count = ${maxPointsPerMeter})] 🧹 Rolled buffer: pruned ${totalDeleted} oldest points beyond ${maxPointsPerMeter} limit.`
+          );
+        }
+        return totalDeleted;
+      }
+
+      // 2. Fallback: Strict Record Count Capacity = 100 per meter (Niagara Roll Policy)
+      // Only deletes points when a meter's point count exceeds maxPointsPerMeter (100 records)
+      const { data: meterPoints } = await this.supabase
         .from("sensor_points")
-        .upsert(sensorPointsBatch, { onConflict: "point_name" });
+        .select("point_name");
 
-      if (upsertErr) {
-        console.error("❌ Supabase Batch Upsert Error:", upsertErr.message);
+      if (meterPoints && meterPoints.length > 0) {
+        for (const mp of meterPoints) {
+          const { data: excess } = await this.supabase
+            .from("point_readings")
+            .select("id")
+            .eq("point_name", mp.point_name)
+            .order("recorded_at", { ascending: false })
+            .range(maxPointsPerMeter, maxPointsPerMeter + 500);
+
+          if (excess && excess.length > 0) {
+            const ids = excess.map((r: any) => r.id);
+            const { count: excessDelCount } = await this.supabase
+              .from("point_readings")
+              .delete({ count: "exact" })
+              .in("id", ids);
+
+            if (excessDelCount) {
+              totalDeleted += excessDelCount;
+              console.log(
+                `[Retention Policy (Capacity = ${maxPointsPerMeter})] 🧹 Pruned ${excessDelCount} oldest points for [${mp.point_name}] (keeping latest ${maxPointsPerMeter}).`
+              );
+            }
+          }
+        }
       }
-    } catch (e: any) {
-      console.warn("⚠️ Temporary Supabase Network Fetch Warning (Retrying next cycle):", e.message || e);
+    } catch (err: any) {
+      console.warn("[Retention Policy] Retention check warning:", err.message || err);
+    } finally {
+      this.isPruning = false;
     }
 
-    // 2. Single Batch Insert into point_readings time-series table
-    try {
-      const { error: insertErr } = await this.supabase
-        .from("point_readings")
-        .insert(pointReadingsBatch);
-
-      if (insertErr) {
-        console.error("❌ Supabase Batch Insert Error:", insertErr.message);
-      }
-    } catch (e: any) {
-      // Ignore temporary socket hiccups gracefully
-    }
+    return totalDeleted;
   }
 }
 

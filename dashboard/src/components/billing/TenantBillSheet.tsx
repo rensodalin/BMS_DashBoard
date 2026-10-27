@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   DollarSign,
   Lightbulb,
@@ -10,6 +10,7 @@ import {
 import { INTERSYS_LOGO_BASE64 } from '../../assets/logoBase64';
 import type { TenantInvoiceDb } from '../../types/bms';
 import { calculateIntervalConsumption } from './TenantInvoicesTable';
+import { generateClientKhqr } from '../../lib/khqrGenerator';
 
 export interface TenantBillSheetProps {
   invoice: TenantInvoiceDb;
@@ -188,9 +189,29 @@ export function calculateTenantBillValues(
 export const TenantBillSheet = React.forwardRef<HTMLDivElement, TenantBillSheetProps>(
   ({ invoice, ratePerKwh, telemetryRange, id = 'conedison-bill-sheet' }, ref) => {
     const [hoveredPieIndex, setHoveredPieIndex] = useState<number | null>(null);
+    const [khqrUrl, setKhqrUrl] = useState<string | null>(null);
 
     // ── Real Data Calculations Derived Directly from Database Invoice ──
     const billValues = calculateTenantBillValues(invoice, telemetryRange, ratePerKwh);
+
+    useEffect(() => {
+      let isMounted = true;
+      generateClientKhqr({
+        invoiceNumber: invoice.invoice_number,
+        amountUsd: billValues.totalAmountDue > 0 ? billValues.totalAmountDue : (invoice.total_cost_usd || 10.0),
+        tenantName: invoice.tenant_name,
+      })
+        .then((res) => {
+          if (isMounted) setKhqrUrl(res.qrCodeDataUrl);
+        })
+        .catch((err) => {
+          console.warn('KHQR generation notice in TenantBillSheet:', err);
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }, [invoice.invoice_number, billValues.totalAmountDue, invoice.tenant_name, invoice.total_cost_usd]);
 
     const {
       openReading,
@@ -550,13 +571,12 @@ export const TenantBillSheet = React.forwardRef<HTMLDivElement, TenantBillSheetP
                           key={idx}
                           onMouseEnter={() => setHoveredPieIndex(idx)}
                           onMouseLeave={() => setHoveredPieIndex(null)}
-                          className={`flex items-center justify-between p-1 rounded transition-all cursor-pointer ${
-                            hoveredPieIndex === idx
+                          className={`flex items-center justify-between p-1 rounded transition-all cursor-pointer ${hoveredPieIndex === idx
                               ? 'bg-sky-50 ring-1 ring-[#00a4e4]'
                               : m.isCurrent
                                 ? 'bg-[#005a87]/10 border border-[#005a87]/30 font-semibold'
                                 : 'hover:bg-slate-50'
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-1.5 min-w-0">
                             <span
@@ -902,6 +922,30 @@ export const TenantBillSheet = React.forwardRef<HTMLDivElement, TenantBillSheetP
                 />
                 <div className="text-[10px] text-slate-600 font-mono leading-tight">
                   <span className="font-bold text-slate-900">Intersys Solutions Co., Ltd.</span> | PO Box 1702, Street 598, Phnom Penh, Cambodia
+                </div>
+              </div>
+
+              {/* ── Bakong KHQR Instant Payment Block ── */}
+              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-red-50 border border-red-200 rounded-md">
+                {khqrUrl ? (
+                  <img
+                    src={khqrUrl}
+                    alt="Bakong KHQR"
+                    className="w-12 h-12 object-contain rounded border border-red-200 bg-white p-0.5"
+                  />
+                ) : (
+                  <div className="w-12 h-12 bg-white border border-red-200 rounded flex items-center justify-center text-[9px] text-red-500 font-mono font-bold">
+                    KHQR
+                  </div>
+                )}
+                <div className="text-[9px] leading-tight">
+                  <div className="font-extrabold text-red-700 flex items-center gap-1">
+                    <span className="px-1 py-0.2 bg-red-600 text-white rounded-xs text-[8px]">KHQR</span>
+                    <span>Bakong Pay</span>
+                  </div>
+                  <div className="text-slate-800 font-bold mt-0.5">SODALIN REN</div>
+                  <div className="text-slate-500 font-mono text-[8.5px]">ren_sodalin@bkrt</div>
+                  <div className="text-[8px] text-slate-500 italic mt-0.5">Scan with any KHQR App</div>
                 </div>
               </div>
 

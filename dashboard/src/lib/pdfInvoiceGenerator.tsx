@@ -488,9 +488,10 @@ export async function getInvoicePdfBase64(
     startReading: number | null;
     endReading: number | null;
     deltaKwh: number | null;
-  } | null
+  } | null,
+  sourceElement?: HTMLElement | null
 ): Promise<string> {
-  const pdf = await createInvoicePdf(invoice, startDate, endDate, ratePerKwh, null, telemetryRange);
+  const pdf = await createInvoicePdf(invoice, startDate, endDate, ratePerKwh, sourceElement, telemetryRange);
   const dataUri = pdf.output('datauristring');
   const base64 = dataUri.split(',')[1];
   return base64;

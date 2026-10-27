@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { X, Calendar, Check, Clock, Mail } from 'lucide-react';
 import { upsertTenantInvoice, syncTenantClientAccount, fetchMeterReadingRange } from '../../lib/supabase';
 import { calculateIntervalConsumption } from './TenantInvoicesTable';
-import type { TenantInvoiceDb } from '../../types/bms';
+import { findLiveMeterPoint } from './BillingWorkspace';
+import type { TenantInvoiceDb, SensorPoint } from '../../types/bms';
 
 const formatIsoSecond = (d: Date = new Date()): string => {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -28,6 +29,7 @@ interface EditTenantInvoiceModalProps {
   isOpen: boolean;
   invoice: TenantInvoiceDb | null;
   ratePerKwh: number;
+  points?: SensorPoint[];
   onClose: () => void;
   onSuccess: (updatedInvoice: TenantInvoiceDb) => void;
 }
@@ -36,6 +38,7 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
   isOpen,
   invoice,
   ratePerKwh,
+  points = [],
   onClose,
   onSuccess,
 }) => {
@@ -60,7 +63,7 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
       setStartDate(invoice.start_date || defaultStart);
       setEndDate(invoice.end_date || defaultEnd);
       setBillingPeriod(invoice.billing_period || defaultPeriod);
-      setKwhReading(invoice.kwh_reading.toString());
+      setKwhReading(Number(invoice.kwh_reading || 0).toFixed(2));
       setDemandCharge((invoice.demand_charge || 0).toString());
       setTenantEmail(invoice.tenant_email || '');
       setStatus(invoice.status);
@@ -74,11 +77,13 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
     const fetchIntervalKwh = async () => {
       if (!invoice || !startDate || !endDate) return;
       try {
-        const meter = invoice.meter_name || invoice.tenant_name;
+        const liveMatch = points ? findLiveMeterPoint(points, invoice.meter_name, invoice.tenant_name) : undefined;
+        const meter = liveMatch ? liveMatch.point_name : (invoice.meter_name || invoice.tenant_name);
         const rangeResult = await fetchMeterReadingRange(meter, startDate, endDate);
         if (!isCancelled) {
+          const baselineKwh = (invoice as any)?.base_kwh || invoice.kwh_reading || 120;
           const calc = calculateIntervalConsumption(
-            invoice.kwh_reading,
+            baselineKwh,
             startDate,
             endDate,
             rangeResult
@@ -94,7 +99,7 @@ export const EditTenantInvoiceModal: React.FC<EditTenantInvoiceModalProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [invoice, startDate, endDate]);
+  }, [invoice?.invoice_number, startDate, endDate, points]);
 
   const setPresetInterval = (days: number) => {
     const end = new Date();

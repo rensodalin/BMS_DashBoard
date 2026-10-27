@@ -105,7 +105,7 @@ export async function deleteSensorPoint(pointName: string): Promise<boolean> {
 /**
  * Fetch historical readings time-series log for a given point name
  */
-export async function fetchPointReadings(pointName: string, limit = 50): Promise<PointReading[]> {
+export async function fetchPointReadings(pointName: string, limit = 60): Promise<PointReading[]> {
   const { data, error } = await supabase
     .from('point_readings')
     .select('*')
@@ -128,8 +128,52 @@ export interface MeterReadingRangeResult {
   endTimeActual?: string;
 }
 
-// High-performance in-memory cache for meter interval ranges
-const rangeResultCache = new Map<string, { result: MeterReadingRangeResult; time: number }>();
+const RANGE_CACHE_KEY = 'bms_meter_range_cache_v1';
+
+const loadRangeCache = (): Map<string, { result: MeterReadingRangeResult; time: number }> => {
+  try {
+    const raw = localStorage.getItem(RANGE_CACHE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw);
+    return new Map(Object.entries(parsed));
+  } catch {
+    return new Map();
+  }
+};
+
+// High-performance persistent cache for meter interval ranges (survives page refreshes)
+const rangeResultCache = loadRangeCache();
+
+const saveRangeCache = () => {
+  try {
+    const obj: Record<string, any> = {};
+    rangeResultCache.forEach((v, k) => {
+      obj[k] = v;
+    });
+    localStorage.setItem(RANGE_CACHE_KEY, JSON.stringify(obj));
+  } catch {}
+};
+
+export function toStandardIso(input?: string): string {
+  if (!input) return '';
+  const str = String(input).trim();
+
+  // 1. Match standard ISO: YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+  const isoMatch = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (isoMatch) {
+    const pad = (n: any) => String(n || 0).padStart(2, '0');
+    return `${isoMatch[1]}-${pad(isoMatch[2])}-${pad(isoMatch[3])}T${pad(isoMatch[4])}:${pad(isoMatch[5])}:${pad(isoMatch[6])}`;
+  }
+
+  // 2. Parse standard date / locale formats (e.g., 9/14/2026 10:42:00 AM)
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+  }
+
+  return str;
+}
 
 /**
  * Fetch the exact recorded meter readings for a given start and end timestamp from point_readings
@@ -141,24 +185,16 @@ export async function fetchMeterReadingRange(
   endIso: string
 ): Promise<MeterReadingRangeResult> {
   try {
-    let cleanStart = (startIso || '').includes(' ')
-      ? startIso.replace(' ', 'T')
-      : (startIso || '');
-    if (cleanStart.length === 10) cleanStart += 'T00:00:00';
-    else if (cleanStart.length === 16) cleanStart += ':00';
-    else cleanStart = cleanStart.slice(0, 19);
-
-    let cleanEnd = (endIso || '').includes(' ')
-      ? endIso.replace(' ', 'T')
-      : (endIso || '');
-    if (cleanEnd.length === 10) cleanEnd += 'T23:59:59';
-    else if (cleanEnd.length === 16) cleanEnd += ':00';
-    else cleanEnd = cleanEnd.slice(0, 19);
+    const cleanStart = toStandardIso(startIso);
+    const cleanEnd = toStandardIso(endIso);
+    if (!cleanStart || !cleanEnd) {
+      return { startReading: null, endReading: null, deltaKwh: null };
+    }
 
     const cacheKey = `${pointName}_${cleanStart}_${cleanEnd}`;
     const cached = rangeResultCache.get(cacheKey);
-    // Return cached range if younger than 10 seconds
-    if (cached && Date.now() - cached.time < 10000) {
+    // Return cached range if it contains valid telemetry
+    if (cached && cached.result && cached.result.deltaKwh !== null) {
       return cached.result;
     }
 
@@ -183,24 +219,33 @@ export async function fetchMeterReadingRange(
     let startRow = startRes.data?.[0];
     let endRow = endRes.data?.[0];
 
-    // If no row exists before start, look for the first row right after start
+    // If no row exists before start, look for the first row right after start (bounded by cleanEnd within 15 mins)
     if (!startRow) {
       const { data: gteData } = await supabase
         .from('point_readings')
         .select('value, recorded_at')
         .eq('point_name', pointName)
         .gte('recorded_at', cleanStart)
+        .lte('recorded_at', cleanEnd)
         .order('recorded_at', { ascending: true })
         .limit(1);
-      startRow = gteData?.[0];
+      if (gteData && gteData[0]) {
+        const sReq = new Date(cleanStart).getTime();
+        const sActual = new Date(gteData[0].recorded_at).getTime();
+        if (isNaN(sReq) || sActual - sReq <= 15 * 60 * 1000) {
+          startRow = gteData[0];
+        }
+      }
     }
 
-    // If no row exists before end, look for latest available reading
+    // If no row exists before end, look for latest available reading bounded by cleanStart and cleanEnd
     if (!endRow) {
       const { data: latestData } = await supabase
         .from('point_readings')
         .select('value, recorded_at')
         .eq('point_name', pointName)
+        .gte('recorded_at', cleanStart)
+        .lte('recorded_at', cleanEnd)
         .order('recorded_at', { ascending: false })
         .limit(1);
       endRow = latestData?.[0];
@@ -243,7 +288,10 @@ export async function fetchMeterReadingRange(
       result = { startReading: startVal, endReading: endVal, deltaKwh: null };
     }
 
-    rangeResultCache.set(cacheKey, { result, time: Date.now() });
+    if (result.deltaKwh !== null) {
+      rangeResultCache.set(cacheKey, { result, time: Date.now() });
+      saveRangeCache();
+    }
     return result;
   } catch (err) {
     console.error('Error fetching meter reading range:', err);
@@ -812,5 +860,91 @@ export async function saveFacilityProfileDb(profile: {
   return { success: primarySuccess, error: primaryError };
 }
 
+/**
+ * Triggers the 100-point rolling retention cleanup matching Niagara History Capacity
+ * Deletes old historical points exceeding 100 records per meter.
+ */
+export async function pruneOldPointReadings(
+  maxPointsPerMeter: number = 20000
+): Promise<{ deletedCount: number; error: any }> {
+  try {
+    let { data, error } = await supabase.rpc('prune_old_point_readings', {
+      max_points_per_meter: maxPointsPerMeter,
+    });
 
+    if (error && error.code === 'PGRST202') {
+      const retry = await supabase.rpc('prune_old_point_readings', {
+        max_points_per_meter: maxPointsPerMeter,
+        retention_days: 30,
+      });
+      data = retry.data;
+      error = retry.error;
+    }
 
+    if (!error) {
+      return { deletedCount: Number(data) || 0, error: null };
+    }
+
+    return { deletedCount: 0, error };
+  } catch (err) {
+    return { deletedCount: 0, error: err };
+  }
+}
+
+export interface BakongPaymentAttemptPayload {
+  invoiceNumber: string;
+  tenantName: string;
+  unitZone: string;
+  amountUsd: number;
+  amountKhr: number;
+  md5Hash: string;
+  qrString?: string;
+  tenantEmail?: string;
+}
+
+/**
+ * Registers an active Bakong KHQR payment attempt into Supabase for real-time monitoring and Telegram notification
+ */
+export async function registerBakongPaymentAttempt(
+  payload: BakongPaymentAttemptPayload
+): Promise<boolean> {
+  try {
+    const { data: existing } = await supabase
+      .from('admin_settings')
+      .select('email')
+      .eq('id', 'bakong_payment_attempts')
+      .maybeSingle();
+
+    let attempts: Record<string, any> = {};
+    if (existing?.email) {
+      try {
+        attempts = JSON.parse(existing.email);
+      } catch {
+        attempts = {};
+      }
+    }
+
+    attempts[payload.invoiceNumber] = {
+      ...payload,
+      status: 'PENDING',
+      createdAt: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from('admin_settings').upsert({
+      id: 'bakong_payment_attempts',
+      name: 'Bakong Active Attempts',
+      email: JSON.stringify(attempts),
+      password: 'active',
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      console.warn('Error saving bakong payment attempt:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.warn('Notice in registerBakongPaymentAttempt:', err.message);
+    return false;
+  }
+}

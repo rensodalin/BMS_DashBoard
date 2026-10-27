@@ -75,6 +75,7 @@ export interface TenantInvoiceDb {
   end_date?: string;
   status: 'PAID' | 'PENDING' | 'OVERDUE';
   due_date?: string;
+  base_kwh?: number;
   created_at?: string;
   updated_at?: string;
 }

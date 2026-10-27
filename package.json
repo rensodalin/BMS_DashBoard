@@ -6,19 +6,40 @@
   "scripts": {
     "start": "ts-node src/infrastructure/index.ts",
     "build": "tsc",
-    "dev": "ts-node src/infrastructure/index.ts"
+    "dev": "ts-node src/infrastructure/index.ts",
+    "server": "ts-node server/server.ts",
+    "server:dev": "ts-node server/server.ts"
   },
-  "keywords": ["bms", "obix", "niagara", "telegram", "supabase", "clean-architecture"],
+  "keywords": [
+    "bms",
+    "obix",
+    "niagara",
+    "telegram",
+    "supabase",
+    "clean-architecture"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
-    "dotenv": "^16.4.7"
+    "axios": "^1.20.0",
+    "bakong-khqr": "^1.0.20",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.7",
+    "express": "^5.2.1",
+    "jspdf": "^4.2.1",
+    "mongoose": "^9.10.0",
+    "nodemailer": "^10.0.9",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.13.9",
+    "@types/nodemailer": "^8.0.1",
+    "@types/qrcode": "^1.5.6",
+    "mongodb-memory-server": "^11.2.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.2"
   }
 }
-

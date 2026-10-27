@@ -207,3 +207,85 @@ export function getAvailableFloors(points: SensorPoint[]): string[] {
 
   return sortFloorNames(Array.from(set));
 }
+
+/**
+ * Normalizes a meter name or tenant name into a stable canonical lookup identity key
+ */
+export function getMeterIdentityKey(meterName?: string, tenantName?: string): string {
+  const norm = (s?: string) =>
+    (s || '')
+      .toLowerCase()
+      .replace(/[\s_\-$]+/g, '')
+      .replace(/(consumption|consumptions|kwh|meter|facility|tenant)/gi, '')
+      .trim();
+
+  let mKey = norm(meterName);
+  if (!mKey) mKey = norm(tenantName) || 'unknown_meter';
+
+  if (mKey === 'stabucks' || mKey === 'starbucks') return 'starbucks';
+  if (mKey === 'asic' || mKey === 'asics') return 'asics';
+
+  return mKey;
+}
+
+/**
+ * Finds the live Niagara sensor point from active telemetry points matching a meter or tenant
+ */
+export function findLiveMeterPoint(
+  points: SensorPoint[],
+  meterName?: string,
+  tenantName?: string
+): SensorPoint | undefined {
+  if (!points || points.length === 0) return undefined;
+
+  const normalize = (s?: string) =>
+    (s || '')
+      .toLowerCase()
+      .replace(/[\s_\-$]+/g, '')
+      .replace(/(consumption|consumptions|kwh|meter|facility|tenant)/gi, '');
+
+  const targetMeter = (meterName || '').toLowerCase().trim();
+  const targetTenant = (tenantName || '').toLowerCase().trim();
+
+  // 1. Direct exact match on point_name
+  let match = points.find(
+    (p) =>
+      p.point_name.toLowerCase() === targetMeter ||
+      (Boolean(targetTenant) && p.point_name.toLowerCase() === targetTenant)
+  );
+  if (match) return match;
+
+  // 2. Normalized core match (e.g. "koi" matches "koi_consumption" or "koi_kwh")
+  const coreMeter = normalize(meterName);
+  if (coreMeter) {
+    match = points.find((p) => normalize(p.point_name) === coreMeter);
+    if (match) return match;
+  }
+
+  // 3. Match using tenant name (e.g. tenant "Brown" matches "Brown_Consumption")
+  const coreTenant = normalize(tenantName);
+  if (coreTenant) {
+    match = points.find((p) => normalize(p.point_name) === coreTenant);
+    if (match) return match;
+  }
+
+  // 4. Substring inclusion
+  if (coreMeter && coreMeter.length >= 3) {
+    match = points.find((p) => {
+      const pCore = normalize(p.point_name);
+      return pCore.includes(coreMeter) || coreMeter.includes(pCore);
+    });
+    if (match) return match;
+  }
+
+  if (coreTenant && coreTenant.length >= 3) {
+    match = points.find((p) => {
+      const pCore = normalize(p.point_name);
+      return pCore.includes(coreTenant) || coreTenant.includes(pCore);
+    });
+    if (match) return match;
+  }
+
+  return undefined;
+}
+

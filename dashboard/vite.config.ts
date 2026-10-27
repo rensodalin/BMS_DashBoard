@@ -1,11 +1,87 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import nodemailer from 'nodemailer'
+import { BakongKHQR, IndividualInfo, khqrData } from 'bakong-khqr'
+import QRCode from 'qrcode'
 
 function emailApiPlugin(): Plugin {
   return {
     name: 'email-api-plugin',
     configureServer(server) {
+      // 1. Dedicated Bakong KHQR Generation Endpoint (runs in Node.js with native SDK)
+      server.middlewares.use('/api/generate-khqr', (req, res) => {
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', (chunk: Buffer | string) => {
+            body += chunk
+          })
+          req.on('end', async () => {
+            try {
+              const data = JSON.parse(body || '{}')
+              const invoiceNumber = data.invoiceNumber || 'INV-2026-001'
+              const amountUsd = Math.max(0.01, Number(Number(data.amountUsd || 0.01).toFixed(2)))
+              const accountId = 'ren_sodalin@bkrt'
+              const merchantName = 'SODALIN REN'
+              const merchantCity = 'Phnom Penh'
+              const ttlHours = data.ttlHours || 72
+              const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000)
+
+              const bakong = new BakongKHQR()
+              const info = new IndividualInfo(accountId, merchantName, merchantCity, {
+                accountInformation: accountId,
+                currency: khqrData.currency.usd,
+                amount: amountUsd,
+                billNumber: invoiceNumber,
+                storeLabel: 'Intersys BMS',
+                terminalLabel: 'Web Billing',
+                expirationTimestamp: expiresAt.getTime(),
+              })
+
+              const result = bakong.generateIndividual(info)
+              if (!result || result.status?.code !== 0 || !result.data) {
+                const msg = result?.status?.message || 'Failed to generate Bakong KHQR'
+                throw new Error(msg)
+              }
+
+              const { qr, md5 } = result.data
+              const qrCodeDataUrl = await QRCode.toDataURL(qr, {
+                errorCorrectionLevel: 'M',
+                margin: 2,
+                width: 320,
+                color: {
+                  dark: '#000000',
+                  light: '#FFFFFF',
+                },
+              })
+
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'application/json')
+              res.end(
+                JSON.stringify({
+                  qr,
+                  md5,
+                  qrCodeDataUrl,
+                  amountUsd,
+                  amountKhr: Math.round(amountUsd * 4100),
+                  accountId,
+                  merchantName,
+                  expiresAt: expiresAt.toISOString(),
+                })
+              )
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : 'Failed to generate KHQR'
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ error: msg }))
+            }
+          })
+        } else {
+          res.statusCode = 405
+          res.end('Method Not Allowed')
+        }
+      })
+
+      // 2. Email Dispatch Endpoint
       server.middlewares.use('/api/send-email', (req, res) => {
         if (req.method === 'POST') {
           let body = ''
@@ -46,13 +122,39 @@ function emailApiPlugin(): Plugin {
                 },
               })
 
-              const formattedAttachments = attachments.map((att: { filename?: string; content: string; encoding?: string; contentType?: string; cid?: string }) => ({
-                filename: att.filename || 'Utility_Invoice.pdf',
-                content: att.content,
-                encoding: att.encoding || 'base64',
-                contentType: att.contentType || 'application/pdf',
-                cid: att.cid,
-              }))
+              const formattedAttachments = attachments.map(
+                (att: {
+                  filename?: string
+                  content: string
+                  encoding?: string
+                  contentType?: string
+                  cid?: string
+                  disposition?: string
+                }) => {
+                  const isBase64 = att.encoding === 'base64' || (typeof att.content === 'string' && !att.content.startsWith('<'))
+                  const buffer = isBase64 && typeof att.content === 'string' ? Buffer.from(att.content, 'base64') : att.content
+
+                  const item: any = {
+                    filename: att.filename || 'Utility_Invoice.pdf',
+                    content: buffer,
+                    contentType: att.contentType || 'application/pdf',
+                  }
+
+                  if (att.cid) {
+                    item.cid = att.cid
+                    item.contentId = att.cid
+                    item.disposition = 'inline'
+                    item.headers = {
+                      'Content-ID': `<${att.cid}>`,
+                      'Content-Disposition': 'inline',
+                    }
+                  } else {
+                    item.disposition = 'attachment'
+                  }
+
+                  return item
+                }
+              )
 
               const info = await transporter.sendMail({
                 from: `"${fromName}" <${user}>`,
@@ -78,7 +180,6 @@ function emailApiPlugin(): Plugin {
           res.statusCode = 405
           res.end('Method Not Allowed')
         }
-      })
     },
   }
 }

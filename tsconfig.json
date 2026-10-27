@@ -8,8 +8,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./"
   },
-  "include": ["src/**/*"],
-  "exclude": ["supabase/**/*", "node_modules", "dist"]
+  "include": ["src/**/*", "server/**/*", "scripts/**/*"],
+  "exclude": ["supabase/**/*", "node_modules", "dist"],
+  "ts-node": {
+    "files": true
+  }
 }

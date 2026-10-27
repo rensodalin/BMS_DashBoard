@@ -116,6 +116,7 @@ export const TenantInvoiceSummaryModal: React.FC<TenantInvoiceSummaryModalProps>
       endDate: invoice.end_date,
       ratePerKwh,
       telemetryRange,
+      sourceElement: printRef.current,
     });
 
     setIsSendingSmtp(false);

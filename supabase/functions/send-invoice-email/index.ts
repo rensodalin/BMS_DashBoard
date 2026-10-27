@@ -74,13 +74,33 @@ Deno.serve(async (req: Request) => {
     });
 
     // Format attachments (Base64 PDF and inline images)
-    const formattedAttachments = attachments.map((att: any) => ({
-      filename: att.filename || "Utility_Invoice.pdf",
-      content: att.content,
-      encoding: att.encoding || "base64",
-      contentType: att.contentType || "application/pdf",
-      cid: att.cid,
-    }));
+    const formattedAttachments = attachments.map((att: any) => {
+      const isBase64 = att.encoding === "base64" || (typeof att.content === "string" && !att.content.startsWith("<"));
+      // In Deno runtime, Buffer is available via global or Uint8Array
+      let content = att.content;
+      try {
+        if (isBase64 && typeof att.content === "string") {
+          content = Uint8Array.from(atob(att.content), (c) => c.charCodeAt(0));
+        }
+      } catch {
+        content = att.content;
+      }
+
+      const item: any = {
+        filename: att.filename || "Utility_Invoice.pdf",
+        content,
+        contentType: att.contentType || "application/pdf",
+      };
+
+      if (att.cid) {
+        item.cid = att.cid;
+        item.disposition = "inline";
+      } else {
+        item.disposition = "attachment";
+      }
+
+      return item;
+    });
 
     // Send Mail
     const info = await transporter.sendMail({

@@ -228,7 +228,7 @@ export class TelegramApiGateway implements ITelegramGateway {
   public async checkIncomingQuestionsAndReply(
     liveDataMap: Map<string, SensorPoint>
   ): Promise<void> {
-    const url = `https://api.telegram.org/bot${this.botToken}/getUpdates?offset=${this.lastUpdateId + 1}&timeout=1`;
+    const url = `https://api.telegram.org/bot${this.botToken}/getUpdates?offset=${this.lastUpdateId + 1}&timeout=0`;
 
     try {
       const res = await fetch(url);

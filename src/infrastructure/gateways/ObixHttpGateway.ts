@@ -222,6 +222,7 @@ export class ObixHttpGateway implements IObixGateway {
     if (depth > 4) return []; // Prevent infinite recursion loops
 
     const points: SensorPoint[] = [];
+    const folderTasks: Array<{ url: string; deviceName: string; floor?: string }> = [];
     const urlWithSlash = targetUrl.endsWith("/") ? targetUrl : `${targetUrl}/`;
 
     try {
@@ -323,8 +324,6 @@ export class ObixHttpGateway implements IObixGateway {
         if (isFolder) {
           const cleanRef = displayName || decodeNiagaraName(refName);
 
-          // Direct subfolders under Billing System (depth === 0) ARE the floors!
-          // e.g. "GF", "First_Floor", "Second_Floor"
           let nextFloor = currentFloor;
           if (depth === 0) {
             nextFloor = cleanRef;
@@ -342,14 +341,24 @@ export class ObixHttpGateway implements IObixGateway {
             subUrl = `${urlWithSlash}${href.replace(/^\//, "")}`;
           }
 
-          const subPoints = await this.crawlUrl(subUrl, subDeviceName, depth + 1, nextFloor);
-          points.push(...subPoints);
+          folderTasks.push({ url: subUrl, deviceName: subDeviceName, floor: nextFloor });
         }
         // 2. IF IT'S A SENSOR POINT (displayValue is not "Folder"): Evaluate point!
         else if (displayStr) {
           const cleanPtName = displayName || decodeNiagaraName(refName);
           const pt = SensorPoint.evaluatePoint(deviceName, cleanPtName, displayStr, currentFloor);
           points.push(pt);
+        }
+      }
+
+      if (folderTasks.length > 0) {
+        const subResults = await Promise.all(
+          folderTasks.map((task) =>
+            this.crawlUrl(task.url, task.deviceName, depth + 1, task.floor)
+          )
+        );
+        for (const res of subResults) {
+          points.push(...res);
         }
       }
 

@@ -30,7 +30,7 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
   const loadData = async (showLoading = false) => {
     if (!point) return;
     if (showLoading) setIsLoading(true);
-    const data = await fetchPointReadings(point.point_name, 50);
+    const data = await fetchPointReadings(point.point_name, 60);
     setReadings(data);
     setIsLoading(false);
   };
@@ -76,16 +76,34 @@ export const PointTrendModal: React.FC<PointTrendModalProps> = ({ point, onClose
   const handleExportExcel = () => {
     if (!point || readings.length === 0) return;
 
-    const headers = ['Timestamp', 'Device Name', 'Point Name', 'Numeric Value', 'Formatted Status'];
+    const headers = [
+      'Timestamp (YYYY-MM-DD HH:mm:ss)',
+      'Time (HH:mm:ss)',
+      'Second (:ss)',
+      'Device Name',
+      'Point Name',
+      'Numeric Value',
+      'Formatted Status',
+    ];
     const rows = readings.map((r) => {
-      const timeStr = new Date(r.recorded_at).toLocaleString();
+      const d = new Date(r.recorded_at);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const YYYY = d.getFullYear();
+      const MM = pad(d.getMonth() + 1);
+      const DD = pad(d.getDate());
+      const HH = pad(d.getHours());
+      const mm = pad(d.getMinutes());
+      const ss = pad(d.getSeconds());
+      const timeStr = `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss}`;
+      const timeOnly = `${HH}:${mm}:${ss}`;
+      const secondOnly = `:${ss}`;
       const statusText = reading.isTemp
         ? `${r.value.toFixed(1)} °C`
         : isEnum
           ? enumYFormatter(r.value)
           : boolYFormatter(r.value);
 
-      return [timeStr, point.device_name || 'Niagara Controller', point.point_name, r.value, statusText];
+      return [timeStr, timeOnly, secondOnly, point.device_name || 'Niagara Controller', point.point_name, r.value, statusText];
     });
 
     const dateStr = new Date().toISOString().slice(0, 10);

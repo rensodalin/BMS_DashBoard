@@ -8,7 +8,6 @@ import {
   Clock,
   DollarSign,
   Activity,
-  Layers,
 } from 'lucide-react';
 
 import type { TenantInvoiceDb, PointReading } from '../../types/bms';
@@ -40,9 +39,9 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
 }) => {
   const [readings, setReadings] = useState<PointReading[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [dataPointsLimit, setDataPointsLimit] = useState<number>(200);
+  const [dataPointsLimit, setDataPointsLimit] = useState<number>(300);
   const [isAutoRefresh, setIsAutoRefresh] = useState<boolean>(true);
-  const [intervalMode, setIntervalMode] = useState<'1m' | 'raw'>('1m');
+  const [intervalMode, setIntervalMode] = useState<'1m' | 'raw'>('raw');
 
   // Load readings from Supabase
   const loadData = async (showSpinner = false) => {
@@ -66,7 +65,7 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
     if (!isAutoRefresh) return;
     const interval = setInterval(() => {
       loadData(false);
-    }, 3000);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [isOpen, invoice?.meter_name, dataPointsLimit, isAutoRefresh]);
@@ -122,12 +121,18 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
       return points;
     }
 
-    // Raw stream
+    // Raw stream (1-second intervals with exact timestamps)
     return readings.map((r, idx) => {
       const d = new Date(r.recorded_at);
       const pad = (n: number) => String(n).padStart(2, '0');
-      const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-      const fullTime = d.toLocaleString();
+      const YYYY = d.getFullYear();
+      const MM = pad(d.getMonth() + 1);
+      const DD = pad(d.getDate());
+      const HH = pad(d.getHours());
+      const mm = pad(d.getMinutes());
+      const ss = pad(d.getSeconds());
+      const timeStr = `${HH}:${mm}:${ss}`;
+      const fullTime = `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss}`;
       const cost = Number((r.value * ratePerKwh).toFixed(2));
       const prevVal = idx > 0 ? readings[idx - 1].value : r.value;
       const deltaKwh = Number(Math.max(0, r.value - prevVal).toFixed(3));
@@ -184,14 +189,14 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
 
   if (!isOpen || !invoice) return null;
 
-  // Export 1-Minute Interval Telemetry Data to CSV
+  // Export Telemetry Data to CSV (1-second raw points or 1-minute intervals)
   const handleExportCsv = async (exportAll = true) => {
     if (!invoice?.meter_name) return;
 
     let targetReadings: PointReading[] = readings;
     if (exportAll) {
       try {
-        const allData = await fetchPointReadings(invoice.meter_name, 1000);
+        const allData = await fetchPointReadings(invoice.meter_name, dataPointsLimit || 300);
         if (allData && allData.length > 0) {
           targetReadings = allData;
         }
@@ -202,79 +207,144 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
 
     if (targetReadings.length === 0) return;
 
-    // Bucket readings by exact 1-minute intervals (YYYY-MM-DD HH:mm:00)
-    const minuteMap = new Map<string, { date: Date; values: number[] }>();
-
-    for (const r of targetReadings) {
-      const d = new Date(r.recorded_at);
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
-      if (!minuteMap.has(key)) {
-        minuteMap.set(key, { date: d, values: [] });
-      }
-      minuteMap.get(key)!.values.push(r.value);
-    }
-
-    const minuteEntries = Array.from(minuteMap.entries());
-    const minutePoints = minuteEntries.map(([key, data], idx, arr) => {
-      const lastVal = data.values[data.values.length - 1];
-      const prevVal = idx > 0 ? arr[idx - 1][1].values[arr[idx - 1][1].values.length - 1] : lastVal;
-      const deltaKwh = Number(Math.max(0, lastVal - prevVal).toFixed(3));
-      const cost = Number((lastVal * ratePerKwh).toFixed(2));
-      const costKhr = Math.round(cost * 4100);
-
-      return {
-        timestamp: key,
-        value: lastVal,
-        deltaKwh,
-        cost,
-        costKhr,
-        samplesInMinute: data.values.length,
-      };
-    });
-
-    const headers = [
-      '#',
-      'Timestamp (1-Minute Interval)',
-      'Tenant Name',
-      'Invoice #',
-      'Unit / Zone',
-      'oBIX Meter Tag',
-      'Interval Duration',
-      'Cumulative Reading (kWh)',
-      '1-Min Interval Delta (kWh)',
-      'Tariff Rate ($/kWh)',
-      'Accrued Cost ($ USD)',
-      'Accrued Cost (KHR)',
-      'Samples Aggregated',
-    ];
-
-    // Export in reverse-chronological order (newest minute interval first)
-    const sorted = [...minutePoints].reverse();
-    const rows = sorted.map((p, idx) => [
-      idx + 1,
-      p.timestamp,
-      invoice.tenant_name,
-      invoice.invoice_number,
-      invoice.unit_zone,
-      invoice.meter_name,
-      '1 Minute (60s)',
-      p.value.toFixed(2),
-      `+${p.deltaKwh.toFixed(3)}`,
-      `$${ratePerKwh.toFixed(4)}`,
-      `$${p.cost.toFixed(2)}`,
-      `${p.costKhr.toLocaleString()} KHR`,
-      `${p.samplesInMinute} raw readings`,
-    ]);
-
     const cleanTenantName = invoice.tenant_name.replace(/[^a-zA-Z0-9]/g, '_');
     const dateStr = new Date().toISOString().slice(0, 10);
     const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, '-');
-    exportToCsv(
-      `1Min_Telemetry_${cleanTenantName}_${sorted.length}_minutes_${dateStr}_${timeStr}.csv`,
-      headers,
-      rows
-    );
+
+    if (intervalMode === '1m') {
+      // 1-Minute Aggregated Export
+      const minuteMap = new Map<string, { date: Date; values: number[] }>();
+      for (const r of targetReadings) {
+        const d = new Date(r.recorded_at);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const key = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+        if (!minuteMap.has(key)) {
+          minuteMap.set(key, { date: d, values: [] });
+        }
+        minuteMap.get(key)!.values.push(r.value);
+      }
+
+      const minuteEntries = Array.from(minuteMap.entries());
+      const minutePoints = minuteEntries.map(([key, data], idx, arr) => {
+        const lastVal = data.values[data.values.length - 1];
+        const prevVal = idx > 0 ? arr[idx - 1][1].values[arr[idx - 1][1].values.length - 1] : lastVal;
+        const deltaKwh = Number(Math.max(0, lastVal - prevVal).toFixed(3));
+        const cost = Number((lastVal * ratePerKwh).toFixed(2));
+        const costKhr = Math.round(cost * 4100);
+
+        return {
+          timestamp: key,
+          timeOnly: key.slice(11),
+          value: lastVal,
+          deltaKwh,
+          cost,
+          costKhr,
+          samplesInMinute: data.values.length,
+        };
+      });
+
+      const headers = [
+        '#',
+        'Timestamp (YYYY-MM-DD HH:mm:ss)',
+        'Time (HH:mm:ss)',
+        'Tenant Name',
+        'Invoice #',
+        'Unit / Zone',
+        'oBIX Meter Tag',
+        'Interval Duration',
+        'Cumulative Reading (kWh)',
+        '1-Min Interval Delta (kWh)',
+        'Tariff Rate ($/kWh)',
+        'Accrued Cost ($ USD)',
+        'Accrued Cost (KHR)',
+        'Samples in Minute',
+      ];
+
+      const sorted = [...minutePoints].reverse();
+      const rows = sorted.map((p, idx) => [
+        idx + 1,
+        p.timestamp,
+        p.timeOnly,
+        invoice.tenant_name,
+        invoice.invoice_number || 'N/A',
+        invoice.unit_zone || 'N/A',
+        invoice.meter_name,
+        '1 Minute (60s)',
+        p.value.toFixed(2),
+        `+${p.deltaKwh.toFixed(3)}`,
+        `$${ratePerKwh.toFixed(4)}`,
+        `$${p.cost.toFixed(2)}`,
+        `${p.costKhr.toLocaleString()} KHR`,
+        `${p.samplesInMinute} readings`,
+      ]);
+
+      exportToCsv(
+        `1Min_Telemetry_${cleanTenantName}_${sorted.length}_minutes_${dateStr}_${timeStr}.csv`,
+        headers,
+        rows
+      );
+    } else {
+      // Raw 1-Second Telemetry Export (All 300 points with exact seconds)
+      const headers = [
+        '#',
+        'Timestamp (YYYY-MM-DD HH:mm:ss)',
+        'Time (HH:mm:ss)',
+        'Second (:ss)',
+        'Tenant Name',
+        'Invoice #',
+        'Unit / Zone',
+        'oBIX Meter Tag',
+        'Interval Cadence',
+        'Reading (kWh)',
+        '1-Second Delta (kWh)',
+        'Tariff Rate ($/kWh)',
+        'Accrued Cost ($ USD)',
+        'Accrued Cost (KHR)',
+      ];
+
+      // Reverse chronological order (newest point at top)
+      const sorted = [...targetReadings].reverse();
+      const rows = sorted.map((r, idx) => {
+        const d = new Date(r.recorded_at);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const YYYY = d.getFullYear();
+        const MM = pad(d.getMonth() + 1);
+        const DD = pad(d.getDate());
+        const HH = pad(d.getHours());
+        const mm = pad(d.getMinutes());
+        const ss = pad(d.getSeconds());
+        const exactTime = `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss}`;
+        const timeOnly = `${HH}:${mm}:${ss}`;
+        const secondOnly = `:${ss}`;
+        const prevVal = idx < sorted.length - 1 ? sorted[idx + 1].value : r.value;
+        const deltaKwh = Number(Math.max(0, r.value - prevVal).toFixed(3));
+        const cost = Number((r.value * ratePerKwh).toFixed(2));
+        const costKhr = Math.round(cost * 4100);
+
+        return [
+          idx + 1,
+          exactTime,
+          timeOnly,
+          secondOnly,
+          invoice.tenant_name,
+          invoice.invoice_number || 'N/A',
+          invoice.unit_zone || 'N/A',
+          invoice.meter_name,
+          '1 Second',
+          Number(r.value).toFixed(2),
+          `+${deltaKwh.toFixed(3)}`,
+          `$${ratePerKwh.toFixed(4)}`,
+          `$${cost.toFixed(2)}`,
+          `${costKhr.toLocaleString()} KHR`,
+        ];
+      });
+
+      exportToCsv(
+        `1Sec_Telemetry_${cleanTenantName}_${rows.length}_points_${dateStr}_${timeStr}.csv`,
+        headers,
+        rows
+      );
+    }
   };
 
 
@@ -387,8 +457,18 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
               {stats.current.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               <span className="text-xs font-normal text-slate-400 ml-1">kWh</span>
             </div>
-            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
-              Live from Niagara oBIX
+            <div className="text-[10px] text-slate-400 font-mono mt-0.5 flex items-center justify-between">
+              <span>Live Niagara oBIX</span>
+              {readings.length > 0 && (
+                <span className="text-cyan-400 font-bold flex items-center gap-1">
+                  <Clock className="w-2.5 h-2.5" />
+                  {(() => {
+                    const d = new Date(readings[readings.length - 1].recorded_at);
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                  })()}
+                </span>
+              )}
             </div>
           </div>
 
@@ -445,25 +525,29 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
             }}
           >
             <div className="text-[11px] font-semibold text-slate-400 flex items-center justify-between">
-              <span>Telemetry Stream</span>
-              <Layers className="w-3.5 h-3.5 text-purple-400" />
+              <span>Telemetry Samples</span>
+              <Clock className="w-3.5 h-3.5 text-purple-400" />
             </div>
             <div className="font-mono text-base font-bold text-white mt-1 flex items-center justify-between">
-              <span>{stats.pointsCount} <span className="text-xs font-normal text-slate-400">Buckets</span></span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/70 text-amber-300 border border-amber-700/40">
-                1 mn / pt
+              <span>{stats.pointsCount} <span className="text-xs font-normal text-slate-400">Points</span></span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-700/40">
+                {intervalMode === 'raw' ? '1s / point' : '1m / point'}
               </span>
             </div>
-            <div className="flex items-center justify-between mt-0.5">
-              <span className="text-[10px] text-slate-500">Live Polling:</span>
+            <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400 font-mono">
+              <span className="text-slate-500">
+                {processedSeries.length > 0
+                  ? `${processedSeries[0].timeStr} → ${processedSeries[processedSeries.length - 1].timeStr}`
+                  : '1s Stream'}
+              </span>
               <button
                 type="button"
                 onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-                className={`text-[10px] font-mono px-1.5 py-0.2 rounded transition cursor-pointer ${
+                className={`text-[9px] font-mono px-1.5 py-0.2 rounded transition cursor-pointer ${
                   isAutoRefresh ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-slate-800 text-slate-400'
                 }`}
               >
-                {isAutoRefresh ? '3s Active' : 'Paused'}
+                {isAutoRefresh ? '1s Active' : 'Paused'}
               </button>
             </div>
           </div>
@@ -506,14 +590,14 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Raw (3s)
+                  Raw (1s)
                 </button>
               </div>
 
               {/* Point Limit Selector */}
               <div className="flex items-center gap-1">
                 <span className="text-[10px] font-mono text-slate-500">Samples:</span>
-                {[50, 100, 200, 500].map((limit) => (
+                {[60, 120, 180, 300, 500].map((limit) => (
                   <button
                     key={limit}
                     type="button"
@@ -649,8 +733,8 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
                 <span>
                   Latest Recorded Telemetry Data ({processedSeries.length} {intervalMode === '1m' ? '1-minute intervals' : 'samples'})
                 </span>
-                <span className="text-[10px] text-amber-300 font-mono">
-                  (1 mn / point)
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1e222b] border border-[#2d313c] text-cyan-300">
+                  {intervalMode === 'raw' ? '1s interval (:ss)' : '1m intervals'}
                 </span>
               </div>
 
@@ -676,7 +760,7 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
               <table className="w-full text-left text-[11px] font-mono">
                 <thead className="sticky top-0 z-10">
                   <tr style={{ backgroundColor: '#131518', borderBottom: '1px solid #262932' }}>
-                    <th className="py-1.5 px-3 text-slate-400 font-medium">Timestamp ({intervalMode === '1m' ? '1m' : 'Raw'})</th>
+                    <th className="py-1.5 px-3 text-slate-400 font-medium">Timestamp (YYYY-MM-DD HH:mm:ss)</th>
                     <th className="py-1.5 px-3 text-slate-400 font-medium">Meter Tag</th>
                     <th className="py-1.5 px-3 text-slate-400 font-medium text-right">Reading (kWh)</th>
                     <th className="py-1.5 px-3 text-slate-400 font-medium text-right">Interval Δ</th>
@@ -699,8 +783,10 @@ export const TenantMeterTrendModal: React.FC<TenantMeterTrendModalProps> = ({
                           className="hover:bg-[#20232a] transition-colors"
                           style={{ borderBottom: '1px solid #20232a' }}
                         >
-                          <td className="py-1.5 px-3 text-slate-300 font-mono">
-                            {p.fullTime}
+                          <td className="py-1.5 px-3 text-slate-300 font-mono flex items-center gap-1.5">
+                            <Clock className="w-3 h-3 text-cyan-400 shrink-0" />
+                            <span>{p.fullTime}</span>
+
                           </td>
                           <td className="py-1.5 px-3 text-cyan-300">{invoice.meter_name}</td>
                           <td className="py-1.5 px-3 text-right font-bold text-amber-300">

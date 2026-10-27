@@ -29,8 +29,8 @@ export class Process10PointObixBatch {
   ) {}
 
   public async execute(): Promise<number> {
-    // Step 1: Poll incoming questions typed in Telegram group by users
-    await this.telegramGateway.checkIncomingQuestionsAndReply(this.liveDataMap);
+    // Step 1: Poll incoming Telegram questions asynchronously in background (non-blocking)
+    this.telegramGateway.checkIncomingQuestionsAndReply(this.liveDataMap).catch(() => {});
 
     // Step 2: Fetch points from Niagara oBIX
     const rawPoints = await this.obixGateway.fetch10PointBatch();

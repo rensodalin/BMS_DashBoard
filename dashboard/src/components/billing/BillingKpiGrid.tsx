@@ -84,28 +84,27 @@ export const BillingKpiGrid: React.FC<BillingKpiGridProps> = ({
         </div>
       </div>
 
-      {/* ── Card 3: Live Tenant Telemetry ── */}
+      {/* ── Card 3: Live Base Telemetry ── */}
       <div className="bg-white border border-slate-100/90 rounded-md p-4 shadow-[0_2px_12px_rgba(0,0,0,0.03)] flex flex-col justify-between hover:shadow-md transition-shadow min-h-[148px]">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-semibold text-slate-500">Live Tenant Meter</span>
-
+          <span className="text-xs font-semibold text-slate-500">Live Base Telemetry</span>
         </div>
         <div>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl font-bold font-mono text-slate-900">
-              {liveKwh.toFixed(2)}
+              {liveKwh.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
             </span>
-            <span className="text-xs font-semibold text-slate-400">kW·h</span>
+            <span className="text-xs font-semibold text-slate-400">kWh</span>
           </div>
           <div className="flex items-center gap-1.5 mt-2">
             <span className="inline-block px-2.5 py-0.5 rounded bg-[#e6edf5] text-[#001F3F] text-[10px] font-semibold">
-              Live: ${(liveKwh * ratePerKwh).toFixed(2)}
+              {(liveKwh / 1000).toFixed(2)} MWh Cumulative
             </span>
           </div>
         </div>
-        <div className="text-[10px] text-slate-400 font-mono mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between truncate">
-          <span className="truncate">TenantIntersys_kWh</span>
-
+        <div className="text-[10px] text-slate-400 font-medium mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between truncate">
+          <span>Across {tenantInvoices.length} Sub-Meters</span>
+          <span>Live Register</span>
         </div>
       </div>
 
